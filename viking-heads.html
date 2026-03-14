@@ -2040,48 +2040,134 @@ async function handleOrderImport(event) {
 // ORDER IMPORT — XLSX PARSER (SheetJS)
 // ============================================================
 
+// Regex patterns for flexible column header detection
+const _SKU_HDR_RE = /stock.?num|stock.?#|sku|style|item.?#|item.?num|item.?code|part.?num|part.?#|catalog.?#|product.?#|vk.?#|model.?#|model.?num/i;
+const _QTY_HDR_RE = /california|qty|quantity|ordered|order.?qty|units|unit.?ord|count|total.?qty|amount/i;
+
+// Try to find the header row and parse SKU+qty from a 2D rows array.
+// Returns [] if no suitable header found (signals fallback to Claude).
+function _parseXlsxRows(rows) {
+  let skuCol = -1, qtyCol = -1, headerIdx = -1;
+
+  for (let i = 0; i < Math.min(rows.length, 25); i++) {
+    const row = rows[i].map(c => (c == null ? '' : String(c).trim()));
+    const si  = row.findIndex(c => _SKU_HDR_RE.test(c));
+    const qi  = row.findIndex(c => _QTY_HDR_RE.test(c));
+    if (si >= 0 && qi >= 0) { skuCol = si; qtyCol = qi; headerIdx = i; break; }
+  }
+
+  if (headerIdx < 0) return [];
+
+  const results = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row    = rows[i];
+    const rawSku = row[skuCol] == null ? '' : String(row[skuCol]).trim().toUpperCase();
+    const rawQty = row[qtyCol];
+    const qty    = rawQty != null && rawQty !== '' ? Math.round(parseFloat(rawQty)) : 0;
+
+    if (!rawSku || qty <= 0) continue;
+
+    // Exact match first
+    if (SKU_TABLE[rawSku]) { results.push({ sku: rawSku, qty }); continue; }
+
+    // Fuzzy: strip spaces/dashes/dots and retry (e.g. "VKS-12-CMDO" → "VKS12CMDO")
+    const clean = rawSku.replace(/[\s\-_.]/g, '');
+    const fuzzy = Object.keys(SKU_TABLE).find(k => k.replace(/[\s\-_.]/g, '') === clean);
+    if (fuzzy) results.push({ sku: fuzzy, qty });
+  }
+
+  return results;
+}
+
+// Claude fallback: convert the sheet to CSV text and let Claude extract SKUs.
+async function _parseXlsxWithClaude(file, wb) {
+  const ws  = wb.Sheets[wb.SheetNames[0]];
+  const csv = XLSX.utils.sheet_to_csv(ws);
+
+  const skuCatalog = Object.entries(SKU_TABLE).map(([sku, info]) => {
+    const parts = [sku, info.productType, info.size];
+    if (info.hookSize) parts.push(`hook ${info.hookSize}`);
+    parts.push(info.color);
+    return parts.join(' | ');
+  }).join('\n');
+
+  const ANTHROPIC_API_KEY = getAnthropicKey();
+  if (!ANTHROPIC_API_KEY) return [];
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type':      'application/json',
+        'x-api-key':         ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: `You are a parser for Viking Heads fishing jig orders. Extract every order line item from this spreadsheet (provided as CSV text).
+
+IMPORTANT — product type prefixes:
+- VKS = Swinghead  |  VKH = VK Head (fixed hook)  |  VFH = Finesse Head
+Do NOT mix these up.
+
+SKU catalog (SKU | Product Type | Size | Hook | Color):
+${skuCatalog}
+
+Spreadsheet CSV:
+${csv.slice(0, 8000)}
+
+Return ONLY a JSON array — no extra text:
+[{"sku":"VKS12CMDO","qty":50},{"sku":"VFH1820BBF","qty":24}]
+
+Rules:
+- Match product descriptions or partial SKUs to the catalog above.
+- Fix minor typos/spacing if clearly a known SKU.
+- Only include actual order line items with a product and quantity.
+- Skip totals, notes, headers, shipping rows.
+- Return [] if nothing found.`,
+        }],
+      }),
+    });
+
+    if (!response.ok) throw new Error(`API ${response.status}`);
+    const data  = await response.json();
+    const raw   = data.content?.[0]?.text?.trim() || '[]';
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) return [];
+
+    const parsed = JSON.parse(match[0]);
+    return parsed
+      .filter(item => item.sku && SKU_TABLE[item.sku.toUpperCase()])
+      .map(item => ({ sku: item.sku.toUpperCase(), qty: Math.max(1, parseInt(item.qty) || 1) }));
+  } catch (e) {
+    showToast(`AI parse failed for "${file.name}": ${e.message}`, 'error');
+    return [];
+  }
+}
+
 async function parseOrderXlsx(file) {
   if (typeof XLSX === 'undefined') {
-    alert('XLSX library not loaded. Check your internet connection and reload the page.');
+    showToast('XLSX library not loaded — reload the page.', 'error');
     return [];
   }
 
   const buffer = await file.arrayBuffer();
   const wb     = XLSX.read(buffer, { type: 'array' });
-  const ws     = wb.Sheets[wb.SheetNames[0]];
-  const rows   = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
-  // Find the header row — look for STOCK NUMBER column
-  let skuCol = -1, qtyCol = -1, headerIdx = -1;
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i].map(c => (c == null ? '' : String(c).trim().toUpperCase()));
-    const si  = row.findIndex(c => c === 'STOCK NUMBER' || c === 'STOCK#' || c === 'SKU' || c === 'STYLE');
-    const qi  = row.findIndex(c =>
-      c === 'CALIFORNIA' || c === 'QTY' || c === 'QUANTITY' || c === 'ORDERED' || c.startsWith('ORDER')
-    );
-    if (si >= 0 && qi >= 0) {
-      skuCol = si; qtyCol = qi; headerIdx = i;
-      break;
-    }
+  // Try every sheet — return as soon as one yields results
+  for (const sheetName of wb.SheetNames) {
+    const ws      = wb.Sheets[sheetName];
+    const rows    = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+    const results = _parseXlsxRows(rows);
+    if (results.length > 0) return results;
   }
 
-  if (headerIdx < 0) {
-    showToast(`"${file.name}" — no SKU/Stock Number column found. This may not be a PO file.`, 'error');
-    return [];
-  }
-
-  const results = [];
-  for (let i = headerIdx + 1; i < rows.length; i++) {
-    const row    = rows[i];
-    const sku    = (row[skuCol] == null ? '' : String(row[skuCol]).trim().toUpperCase());
-    const rawQty = row[qtyCol];
-    const qty    = rawQty != null && rawQty !== '' ? Math.round(parseFloat(rawQty)) : 0;
-    if (!sku || qty <= 0 || !SKU_TABLE[sku]) continue;
-    results.push({ sku, qty });
-  }
-
-  return results;
+  // Column detection failed on all sheets — fall back to Claude AI
+  showToast(`Column detection failed for "${file.name}" — trying AI parse…`, 'info');
+  return _parseXlsxWithClaude(file, wb);
 }
 
 // ============================================================
@@ -2164,7 +2250,7 @@ async function parseOrderImage(file) {
       },
       body: JSON.stringify({
         model:      'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
+        max_tokens: 2048,
         messages: [{
           role: 'user',
           content: [
@@ -2216,7 +2302,7 @@ Rules:
       .map(item => ({ sku: item.sku.toUpperCase(), qty: Math.max(1, parseInt(item.qty) || 1) }));
 
   } catch (err) {
-    alert('Image parsing failed: ' + err.message);
+    showToast('Image/PDF parsing failed: ' + err.message, 'error');
     return [];
   } finally {
     if (importBtn) { importBtn.textContent = origText; importBtn.disabled = false; }
