@@ -3922,20 +3922,79 @@ async function startWithAuthGate() {
 const GMAIL_CLIENT_ID = '724553436284-s8s1u9h80pgmsoiqp08vpj06a3lmj0d9.apps.googleusercontent.com';
 const GMAIL_SCOPE     = 'https://www.googleapis.com/auth/gmail.readonly';
 
-// Known shop senders — used to filter the inbox search
+// Known shop senders — used to filter the inbox search.
+// shopKey drives per-shop deterministic classification rules in _shopClassify().
 const KNOWN_SHOPS = [
-  { email: 'fearnofish86@gmail.com',          name: 'Reel Addiction'       },
-  { email: 'doug.horvath@tacklewarehouse.com', name: 'Tackle Warehouse'     },
-  { email: 'jessi.grant@tacklewarehouse.com',  name: 'Tackle Warehouse'     },
-  { email: 'RSimoneau@turners.com',            name: "Turner's Outdoorsman" },
-  { email: 'KTibbets@turners.com',             name: "Turner's Outdoorsman" },
-  { email: 'DMontes@turners.com',              name: "Turner's Outdoorsman" },
-  { email: 'jacobvlastnik@yahoo.com',          name: 'Fishermans Access'    },
-  { email: 'johnnyssportshop1@gmail.com',      name: "Johnny's Sport Shop"  },
-  { email: 'marc@performancetackle.com',       name: 'Performance Tackle'   },
-  { email: 'sales@anglerschoicetackle.com',    name: "Angler's Choice"      },
-  { email: 'accounting@anglerschoicetackle.com', name: "Angler's Choice"    },
+  { email: 'fearnofish86@gmail.com',            name: 'Reel Addiction',       shopKey: 'reel'    },
+  { email: 'doug.horvath@tacklewarehouse.com',  name: 'Tackle Warehouse',     shopKey: 'tw'      },
+  { email: 'jessi.grant@tacklewarehouse.com',   name: 'Tackle Warehouse',     shopKey: 'tw'      },
+  { email: 'RSimoneau@turners.com',             name: "Turner's Outdoorsman", shopKey: 'turners' },
+  { email: 'KTibbets@turners.com',              name: "Turner's Outdoorsman", shopKey: 'turners' },
+  { email: 'DMontes@turners.com',               name: "Turner's Outdoorsman", shopKey: 'turners' },
+  { email: 'jacobvlastnik@yahoo.com',           name: 'Fishermans Access',    shopKey: 'fish'    },
+  { email: 'johnnyssportshop1@gmail.com',       name: "Johnny's Sport Shop",  shopKey: 'johnnys' },
+  { email: 'marc@performancetackle.com',        name: 'Performance Tackle',   shopKey: 'perf'    },
+  { email: 'sales@anglerschoicetackle.com',     name: "Angler's Choice",      shopKey: 'anglers' },
+  { email: 'accounting@anglerschoicetackle.com',name: "Angler's Choice",      shopKey: 'anglers' },
 ];
+
+// ── Per-shop deterministic classification ────────────────────────────────────
+// Returns { isOrder, reason, isTW?, twUrls? } or null (→ falls through to AI).
+// Rules derived from observed email patterns across all shops.
+function _shopClassify(shopKey, subject, snippet, attachments) {
+  const snip    = (snippet || '').toLowerCase();
+  const attStr  = attachments.map(a => a.name.toLowerCase()).join(' ');
+
+  switch (shopKey) {
+
+    case 'fish':
+      // Jacob always uses subject "FISHERMANS ACCESS ORDER" (occasional typos tolerated)
+      return /fishermans?\s+acces+\s+order/i.test(subject)
+        ? { isOrder: true,  reason: 'Fishermans Access order' }
+        : { isOrder: false, reason: 'Not an order subject' };
+
+    case 'turners':
+      // Kyle's orders: subject contains "viking heads" + "order", no invoice/price-list noise
+      // OR body contains his standard "Evelyn can you build the attached PO" line
+      if (/viking.?heads/i.test(subject) && /\border\b/i.test(subject) && !/invoice|price.?list/i.test(subject))
+        return { isOrder: true,  reason: "Turner's order subject" };
+      if (/evelyn.{0,40}build.{0,40}po/i.test(snip))
+        return { isOrder: true,  reason: "Turner's PO build request" };
+      return { isOrder: false, reason: 'Not a Turner\'s order' };
+
+    case 'tw': {
+      // Doug's orders always have subject "Tackle Warehouse PO #XXXXX" or "TW POs …"
+      if (!/tackle\s+warehouse\s+po\s*#|^tw\s+pos?\b|tw\s+opening\s+orders/i.test(subject))
+        return { isOrder: false, reason: 'Not a TW order subject' };
+      // Extract portal URLs from the snippet (may be truncated; catches most cases)
+      const twUrls = [];
+      const urlRe  = /https?:\/\/www\.tacklewarehouse\.com\/po\.html\?[^\s"<&]+(?:&[^\s"<]+)*/g;
+      let m;
+      while ((m = urlRe.exec(snippet)) !== null) twUrls.push(m[0]);
+      return { isOrder: true, reason: 'Tackle Warehouse PO', isTW: true, twUrls };
+    }
+
+    case 'johnnys':
+      // Warren uses "Purchase Order: Johnny's Sport Shop" for fresh threads.
+      // For reply threads he always writes "order attached below" / "small order attached".
+      if (/purchase\s+order/i.test(subject))
+        return { isOrder: true,  reason: "Johnny's PO subject" };
+      if (/order\s+attached|attached.*order|small\s+order/i.test(snip))
+        return { isOrder: true,  reason: 'Order attached in body' };
+      return { isOrder: false, reason: 'No order signal' };
+
+    case 'reel':
+      // Aaron names his file "Reel Addiction Order X.xlsx", or body says "Attached is our … order"
+      if (/order/i.test(attStr))
+        return { isOrder: true,  reason: 'Order in filename' };
+      if (/attached is our|attached.*first order/i.test(snip))
+        return { isOrder: true,  reason: 'Order attached in body' };
+      return { isOrder: false, reason: 'No order signal' };
+
+    default:
+      return null; // Unknown shop → AI screener decides
+  }
+}
 
 let _gmailToken = null;
 
@@ -4036,16 +4095,31 @@ async function _showGmailModal() {
   document.body.appendChild(modal);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
-  // Search Gmail for emails from known shops with attachments
-  const fromQuery = KNOWN_SHOPS.map(s => `from:${s.email}`).join(' OR ');
-  const q = encodeURIComponent(`has:attachment (${fromQuery})`);
+  // Two parallel queries:
+  //  Q1 — all shops with attachments (covers most orders)
+  //  Q2 — TW-specific without attachment requirement (TW orders are often URL-only)
+  const twShops      = KNOWN_SHOPS.filter(s => s.shopKey === 'tw');
+  const nonTwShops   = KNOWN_SHOPS.filter(s => s.shopKey !== 'tw');
+  const fromAll      = KNOWN_SHOPS.map(s => `from:${s.email}`).join(' OR ');
+  const fromTw       = twShops.map(s => `from:${s.email}`).join(' OR ');
+  const q1 = encodeURIComponent(`has:attachment (${fromAll})`);
+  const q2 = encodeURIComponent(`(${fromTw}) subject:"Tackle Warehouse PO"`);
 
   try {
-    const res  = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=30&q=${q}`, {
-      headers: { Authorization: `Bearer ${_gmailToken}` },
-    });
-    const data = await res.json();
-    if (!data.messages || !data.messages.length) {
+    const [res1, res2] = await Promise.all([
+      fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${q1}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
+      fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${q2}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
+    ]);
+    const [d1, d2] = await Promise.all([res1.json(), res2.json()]);
+
+    // Merge and deduplicate by message ID
+    const seen   = new Set();
+    const msgIds = [];
+    for (const m of [...(d1.messages || []), ...(d2.messages || [])]) {
+      if (!seen.has(m.id)) { seen.add(m.id); msgIds.push(m.id); }
+    }
+
+    if (!msgIds.length) {
       document.getElementById('gmail-modal-body').innerHTML =
         '<div class="muted">No order emails found from known shops.</div>';
       return;
@@ -4053,8 +4127,8 @@ async function _showGmailModal() {
 
     // Fetch full message details (needed to get nested attachment parts)
     const details = await Promise.all(
-      data.messages.slice(0, 20).map(m =>
-        fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`, {
+      msgIds.slice(0, 25).map(id =>
+        fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, {
           headers: { Authorization: `Bearer ${_gmailToken}` },
         }).then(r => r.json())
       )
@@ -4073,29 +4147,43 @@ async function _showGmailModal() {
       return acc;
     }
 
-    // Filter to only those that have XLSX / CSV / image attachments
+    // Build rows — per-shop rules first, AI screener as fallback
     const rows = details
       .map(msg => {
         const headers   = msg.payload?.headers || [];
         const getHeader = name => (headers.find(h => h.name === name) || {}).value || '';
         const fromRaw   = getHeader('From');
         const fromEmail = (fromRaw.match(/<(.+?)>/) || [, fromRaw])[1].toLowerCase().trim();
-        const shop      = KNOWN_SHOPS.find(s => s.email.toLowerCase() === fromEmail);
+        const shopEntry = KNOWN_SHOPS.find(s => s.email.toLowerCase() === fromEmail);
         const subject   = getHeader('Subject') || '(no subject)';
         const date      = getHeader('Date');
+        const snippet   = msg.snippet || '';
 
         const allParts    = msg.payload?.parts || (msg.payload ? [msg.payload] : []);
         const attachments = findAttachmentParts(allParts, msg.id);
 
-        if (!attachments.length) return null;
+        // TW emails are valid even without importable attachments (order is a URL)
+        const isTwShop = shopEntry?.shopKey === 'tw';
+        if (!attachments.length && !isTwShop) return null;
 
-        // Quick keyword pre-filter (still used as fallback if AI screening fails)
-        const isReply    = /^\s*(re|fwd|fw)\s*:/i.test(subject);
-        const isQuestion = /\b(question|inquiry|complaint|refund|return|tracking|delivery\s+fee|shipment\s+status)\b/i.test(subject);
-        const isSuspect  = isReply || isQuestion;
+        // Run per-shop deterministic classifier
+        const ruled = shopEntry ? _shopClassify(shopEntry.shopKey, subject, snippet, attachments) : null;
 
-        const snippet = msg.snippet || '';
-        return { msgId: msg.id, shop: shop?.name || fromEmail, subject, date, attachments, isSuspect, snippet, aiScreened: false, aiReason: '' };
+        const isSuspect    = ruled ? !ruled.isOrder : /^\s*(re|fwd|fw)\s*:/i.test(subject);
+        const shopScreened = ruled !== null;
+        const shopReason   = ruled?.reason || '';
+        const isTW         = ruled?.isTW   || false;
+        const twUrls       = ruled?.twUrls || [];
+
+        return {
+          msgId: msg.id,
+          shop: shopEntry?.name || fromEmail,
+          shopKey: shopEntry?.shopKey || '',
+          subject, date, snippet, attachments,
+          isSuspect, shopScreened, shopReason,
+          isTW, twUrls,
+          aiScreened: false, aiReason: '',
+        };
       })
       .filter(Boolean);
 
@@ -4105,33 +4193,57 @@ async function _showGmailModal() {
       return;
     }
 
-    // AI screening — classify all emails in one batch call
-    document.getElementById('gmail-modal-body').innerHTML =
-      `<div style="color:#5a7a9a;font-size:13px">🤖 AI screening ${rows.length} email${rows.length !== 1 ? 's' : ''}…</div>`;
-    await _aiScreenEmails(rows);
+    // AI screening — only for rows not already classified by per-shop rules
+    const needsAI = rows.filter(r => !r.shopScreened);
+    if (needsAI.length) {
+      document.getElementById('gmail-modal-body').innerHTML =
+        `<div style="color:#5a7a9a;font-size:13px">🤖 AI screening ${needsAI.length} unrecognised email${needsAI.length !== 1 ? 's' : ''}…</div>`;
+      await _aiScreenEmails(needsAI);
+    }
 
     // Render the results table
+    const shopScreenedCount = rows.filter(r => r.shopScreened).length;
     let html = `
-      <div class="muted" style="font-size:12px;margin-bottom:14px">${rows.length} email${rows.length !== 1 ? 's' : ''} found from known shops</div>
+      <div class="muted" style="font-size:12px;margin-bottom:14px">
+        ${rows.length} email${rows.length !== 1 ? 's' : ''} found
+        <span style="margin-left:8px;color:#4a9a6a">✦ ${shopScreenedCount} classified by shop rules</span>
+      </div>
       <table>
-        <thead><tr><th>Shop</th><th>Subject</th><th>Date</th><th>Attachment</th><th></th></tr></thead>
+        <thead><tr><th>Shop</th><th>Subject</th><th>Date</th><th>Attachment / Action</th><th></th></tr></thead>
         <tbody>`;
+
     rows.forEach(row => {
-      row.attachments.forEach(att => {
-        const dateStr    = new Date(row.date).toLocaleDateString();
-        const badgeTip  = row.aiScreened
-          ? (row.isSuspect ? `AI: ${row.aiReason}` : `AI: ${row.aiReason}`)
-          : 'Subject looks like a customer question or non-order email — verify before importing';
-        const warnBadge = row.isSuspect
-          ? `<span title="${badgeTip}"
-               style="background:#8b3a3a;color:#ffb3b3;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;cursor:help">⚠ Not an order?</span>`
-          : (row.aiScreened
-              ? `<span title="AI: ${row.aiReason}"
-                   style="background:#1a3a1a;color:#7ecf7e;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;cursor:help">✓ Order</span>`
-              : '');
-        html += `<tr style="${row.isSuspect ? 'opacity:0.7' : ''}">
+      const dateStr = new Date(row.date).toLocaleDateString();
+
+      // Badge logic: shop rules take priority over AI
+      const reason = row.shopScreened ? row.shopReason : (row.aiScreened ? row.aiReason : '');
+      const source = row.shopScreened ? '📋 Rule' : (row.aiScreened ? '🤖 AI' : '');
+      const warnBadge = row.isSuspect
+        ? `<span title="${source}: ${reason}" style="background:#8b3a3a;color:#ffb3b3;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;cursor:help">⚠ Not an order?</span>`
+        : `<span title="${source}: ${reason}" style="background:#1a3a1a;color:#7ecf7e;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;cursor:help">✓ Order</span>`;
+
+      // ── Tackle Warehouse: show portal link buttons, skip the routing guide ──
+      if (row.isTW) {
+        const poLinks = row.twUrls.length
+          ? row.twUrls.map(url => {
+              const poNum = (url.match(/ponum=(\d+)/) || [])[1] || '?';
+              return `<a href="${url}" target="_blank" class="btn btn-gold btn-sm" style="margin-right:4px">🔗 Open PO ${poNum}</a>`;
+            }).join('')
+          : `<span class="muted" style="font-size:11px">No portal URL in snippet — open email manually</span>`;
+        html += `<tr>
           <td style="color:#c9a227;font-weight:bold">${row.shop}</td>
-          <td class="muted" style="font-size:12px">${row.subject}${warnBadge}</td>
+          <td style="font-size:12px">${row.subject}${warnBadge}</td>
+          <td class="muted" style="font-size:12px">${dateStr}</td>
+          <td colspan="2" style="font-size:12px">${poLinks}</td>
+        </tr>`;
+        return;
+      }
+
+      // ── All other shops: one row per attachment ──
+      row.attachments.forEach(att => {
+        html += `<tr style="${row.isSuspect ? 'opacity:0.6' : ''}">
+          <td style="color:#c9a227;font-weight:bold">${row.shop}</td>
+          <td style="font-size:12px">${row.subject}${warnBadge}</td>
           <td class="muted" style="font-size:12px">${dateStr}</td>
           <td style="font-size:12px">${att.name}</td>
           <td><button class="btn btn-gold btn-sm"
@@ -4141,6 +4253,7 @@ async function _showGmailModal() {
         </tr>`;
       });
     });
+
     html += '</tbody></table>';
     document.getElementById('gmail-modal-body').innerHTML = html;
 
