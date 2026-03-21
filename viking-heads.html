@@ -1288,7 +1288,7 @@ function renderSwingheads() {
 
   let html = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>Size</th><th>Hook</th><th>Total Poured</th><th>Adjust Stock</th>
+      <th>Size</th><th>Hook</th><th>In Stock</th><th>Adjust Stock</th>
     </tr></thead><tbody>`;
 
   SWINGHEAD_COLORS.forEach((color, ci) => {
@@ -1327,7 +1327,7 @@ function renderFinesse() {
 
   let html = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>Size</th><th>Hook</th><th>Total Poured</th><th>Adjust Stock</th>
+      <th>Size</th><th>Hook</th><th>In Stock</th><th>Adjust Stock</th>
     </tr></thead><tbody>`;
 
   FINESSE_COLORS.forEach((color, ci) => {
@@ -1816,7 +1816,7 @@ function submitGenericPour(id) {
     data.components[key] = (data.components[key] || 0) - amt;
   });
 
-  data.pours.push({
+  data.pours.unshift({
     id:          Date.now() + '-' + Math.random().toString(36).slice(2, 7),
     date:        new Date().toISOString(),
     productType: cfg.productType,
@@ -1840,7 +1840,7 @@ function renderGenericPage(id) {
   let html = '';
 
   if (isRig) {
-    html = `<div class="table-wrap"><table><thead><tr><th>Color</th><th>Total Poured</th><th>Adjust Stock</th></tr></thead><tbody>`;
+    html = `<div class="table-wrap"><table><thead><tr><th>Color</th><th>In Stock</th><th>Adjust Stock</th></tr></thead><tbody>`;
     cfg.colors.forEach((color, ci) => {
       const totalQty = pours.filter(p => p.color === color).reduce((s, p) => s + p.quantity, 0);
       const inputId  = `adj-${id}-${ci}`;
@@ -1855,7 +1855,7 @@ function renderGenericPage(id) {
     html += '</tbody></table></div>';
 
   } else if (isUppc) {
-    html = `<div class="table-wrap"><table><thead><tr><th>Size</th><th>Total Poured</th><th>Adjust Stock</th></tr></thead><tbody>`;
+    html = `<div class="table-wrap"><table><thead><tr><th>Size</th><th>In Stock</th><th>Adjust Stock</th></tr></thead><tbody>`;
     cfg.sizes.forEach((size, si) => {
       const totalQty = pours.filter(p => p.size === size).reduce((s, p) => s + p.quantity, 0);
       const inputId  = `adj-${id}-${si}`;
@@ -1871,7 +1871,7 @@ function renderGenericPage(id) {
 
   } else {
     const colCount = cfg.hasHook ? 4 : 3;
-    html = `<div class="table-wrap"><table><thead><tr><th>Size</th>${cfg.hasHook ? '<th>Hook</th>' : ''}<th>Total Poured</th><th>Adjust Stock</th></tr></thead><tbody>`;
+    html = `<div class="table-wrap"><table><thead><tr><th>Size</th>${cfg.hasHook ? '<th>Hook</th>' : ''}<th>In Stock</th><th>Adjust Stock</th></tr></thead><tbody>`;
     cfg.colors.forEach((color, ci) => {
       html += `<tr class="color-group-header"><td colspan="${colCount}">${color}</td></tr>`;
       cfg.sizes.forEach((size, si) => {
@@ -2065,7 +2065,7 @@ function _parseXlsxRows(rows) {
     const rawQty = row[qtyCol];
     const qty    = rawQty != null && rawQty !== '' ? Math.round(parseFloat(rawQty)) : 0;
 
-    if (!rawSku || qty <= 0) continue;
+    if (!rawSku || !qty || qty <= 0 || isNaN(qty)) continue;
 
     // Exact match first
     if (SKU_TABLE[rawSku]) { results.push({ sku: rawSku, qty }); continue; }
@@ -2201,11 +2201,16 @@ function parseOrderCsv(text) {
       qty = qtyIdx >= 0 ? (parseInt(cols[qtyIdx]) || 0) : 1;
     } else {
       sku = (cols[0] || '').toUpperCase();
-      qty = parseInt(cols[1]) || 1;
+      qty = parseInt(cols[1]) || 0;
     }
 
     if (sku && qty > 0 && SKU_TABLE[sku]) {
       results.push({ sku, qty });
+    } else if (sku && qty > 0) {
+      // Fuzzy: strip spaces/dashes/dots and retry (e.g. "VKS-12-CMDO" → "VKS12CMDO")
+      const clean = sku.replace(/[\s\-_.]/g, '');
+      const fuzzy = Object.keys(SKU_TABLE).find(k => k.replace(/[\s\-_.]/g, '') === clean);
+      if (fuzzy) results.push({ sku: fuzzy, qty });
     }
   });
 
@@ -2337,6 +2342,10 @@ function populateOrderFormRows(results) {
       <div class="form-group">
         <label>SKU</label>
         <input type="text" class="sku-input" data-row="${idx}" style="width:160px;text-transform:uppercase" placeholder="e.g. VKS12CMDO" oninput="validateSkuRow(${idx})" value="${sku}">
+      </div>
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <button class="btn btn-sm" onclick="openSkuPicker(${idx})" title="Pick SKU by product/size/color">🔍 Pick</button>
       </div>
       <div class="form-group">
         <label>Qty</label>
@@ -2972,11 +2981,24 @@ function markOrderPoured(orderId) {
   const order = data.orders.find(o => o.id === orderId);
   if (!order || order.status === 'poured') return;
 
-  const allComponents = aggregateComponents(order.items.map(i => i.components));
+  const unpouredItems = order.items.filter(i => !i.itemStatus?.poured);
+
+  // If all items were already poured individually, just finalize order status
+  if (!unpouredItems.length) {
+    order.status = 'poured';
+    save(data);
+    renderOrders();
+    showToast('All items already poured — order marked as poured');
+    return;
+  }
+
+  const allComponents = aggregateComponents(unpouredItems.map(i => i.components));
   const warn = checkShortfall(allComponents);
+  const alreadyPoured = order.items.length - unpouredItems.length;
+  const alreadyNote = alreadyPoured ? `\n(${alreadyPoured} item${alreadyPoured > 1 ? 's' : ''} already poured individually — skipped)` : '';
   const msg  = warn.length
-    ? 'Insufficient stock:\n' + warn.join('\n') + '\n\nMark as poured anyway?'
-    : `Mark order for "${order.shop}" as poured and deduct components?`;
+    ? 'Insufficient stock:\n' + warn.join('\n') + alreadyNote + '\n\nMark as poured anyway?'
+    : `Mark order for "${order.shop}" as poured and deduct components?${alreadyNote}`;
   if (!confirm(msg)) return;
 
   Object.entries(allComponents).forEach(([k, v]) => {
@@ -2984,7 +3006,7 @@ function markOrderPoured(orderId) {
   });
 
   const now = new Date().toISOString();
-  order.items.forEach(item => {
+  unpouredItems.forEach(item => {
     data.pours.unshift({
       id:          Date.now().toString(36) + Math.random().toString(36).slice(2),
       date:        now,
@@ -3000,6 +3022,10 @@ function markOrderPoured(orderId) {
   });
 
   order.status = 'poured';
+  order.items.forEach(item => {
+    item.itemStatus = item.itemStatus || {};
+    item.itemStatus.poured = true;
+  });
   save(data);
   renderOrders();
 }
@@ -3371,7 +3397,7 @@ function openBundle(bundleId) {
   const bundle = data.bundles.find(b => b.id === bundleId);
   if (!bundle) return;
   const orders = data.orders.filter(o => bundle.orderIds.includes(o.id));
-  renderCombinedView(bundle.skuAgg, orders, bundle.id);
+  renderCombinedView(_buildSkuAgg(orders), orders, bundle.id);
 }
 
 function printBundle(bundleId) {
@@ -3440,6 +3466,10 @@ function logPourForItem(orderId, itemIdx) {
   const order = data.orders.find(o => o.id === orderId);
   if (!order || !order.items[itemIdx]) return;
   const item = order.items[itemIdx];
+
+  if (item.itemStatus?.poured) {
+    if (!confirm(`${item.sku} is already marked as poured. Log another pour and deduct components again?`)) return;
+  }
 
   const warn = checkShortfall(item.components);
   const warnTxt = warn.length ? `\n⚠ Insufficient stock:\n${warn.join('\n')}\n\n` : '';
@@ -4099,7 +4129,6 @@ async function _showGmailModal() {
   //  Q1 — all shops with attachments (covers most orders)
   //  Q2 — TW-specific without attachment requirement (TW orders are often URL-only)
   const twShops      = KNOWN_SHOPS.filter(s => s.shopKey === 'tw');
-  const nonTwShops   = KNOWN_SHOPS.filter(s => s.shopKey !== 'tw');
   const fromAll      = KNOWN_SHOPS.map(s => `from:${s.email}`).join(' OR ');
   const fromTw       = twShops.map(s => `from:${s.email}`).join(' OR ');
   const q1 = encodeURIComponent(`has:attachment (${fromAll})`);
@@ -4276,6 +4305,7 @@ async function importGmailAttachment(btn, msgId, attachmentId, filename, mimeTyp
     const data = await res.json();
 
     // Gmail returns base64url — convert to a File object so existing parsers work unchanged
+    if (!data.data) throw new Error('Gmail returned empty attachment data');
     const b64  = data.data.replace(/-/g, '+').replace(/_/g, '/');
     const bin  = atob(b64);
     const arr  = new Uint8Array(bin.length);
