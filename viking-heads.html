@@ -1589,13 +1589,16 @@ function renderHistory() {
     pours.forEach(p => {
       const linked = p.linkedOrderId
         ? `<span class="muted" style="font-size:10px;margin-left:6px" title="Linked to order for ${p.shop||''}">🔗</span>` : '';
+      const tag = p.isShipment ? `<span style="color:#4cdf8d;font-size:9px;margin-left:6px;letter-spacing:.5px">SHIPPED</span>`
+        : p.isAdjustment ? `<span style="color:#8aadcf;font-size:9px;margin-left:6px;letter-spacing:.5px">ADJUST</span>` : '';
+      const qtyStyle = p.quantity < 0 ? 'color:#e87070' : '';
       html += `<tr>
-        <td class="col-created">${fmtDate(p.date)}${linked}</td>
+        <td class="col-created">${fmtDate(p.date)}${linked}${tag}</td>
         <td>${p.productType}</td>
         <td>${p.size}</td>
         <td>${p.color}</td>
         <td>${p.hookSize || '\u2014'}</td>
-        <td class="num">${p.quantity}</td>
+        <td class="num" style="${qtyStyle}">${p.quantity}</td>
         <td class="muted col-components">${deductionLine(p.deductions)}</td>
       </tr>`;
     });
@@ -2926,6 +2929,9 @@ function renderOrderCard(order) {
   const pourBtn = isPoured
     ? `<span style="color:#3a5a7a;font-size:11px">Poured</span>`
     : `<button class="btn btn-gold btn-sm" onclick="event.stopPropagation();markOrderPoured('${order.id}')">Mark as Poured</button>`;
+  const shipBtn = isPoured
+    ? `<button class="btn btn-sm" style="background:#0a3020;border-color:#1a6040;color:#4cdf8d" onclick="event.stopPropagation();showShipPanel('${order.id}')">📦 Ship</button>`
+    : '';
 
   const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
   const skuCount = order.items.length;
@@ -2964,6 +2970,7 @@ function renderOrderCard(order) {
       <button id="order-toggle-${order.id}" class="btn btn-sm" onclick="event.stopPropagation();toggleOrderDetails('${order.id}')">▼ Details</button>
       <button class="btn btn-sm" onclick="event.stopPropagation();printOrder('${order.id}')">🖨 Print</button>
       ${pourBtn}
+      ${shipBtn}
       <button class="btn btn-sm" onclick="event.stopPropagation();duplicateOrder('${order.id}')" title="Clone this order">⧉ Dup</button>
       <button class="btn btn-sm" onclick="event.stopPropagation();archiveOrder('${order.id}')" title="Move to archive">📦</button>
       <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder('${order.id}')">Delete</button>
@@ -2971,6 +2978,7 @@ function renderOrderCard(order) {
     <div id="order-details-${order.id}" style="display:none">
       ${renderOrderDetailsContent(order)}
     </div>
+    <div id="ship-panel-${order.id}" style="display:none"></div>
   </div>`;
 }
 
@@ -3029,6 +3037,150 @@ function markOrderPoured(orderId) {
     item.itemStatus.poured = true;
   });
   save(data);
+  renderOrders();
+}
+
+// ============================================================
+// ORDERS — SHIP
+// ============================================================
+
+function showShipPanel(orderId) {
+  const data  = load();
+  const order = data.orders.find(o => o.id === orderId);
+  if (!order || order.status !== 'poured') return;
+
+  const panel = document.getElementById('ship-panel-' + orderId);
+  if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+
+  // Compute current stock per productType+size+color+hookSize from pours
+  const stockMap = {};
+  data.pours.forEach(p => {
+    const key = [p.productType, p.size, p.color, p.hookSize || ''].join('|');
+    stockMap[key] = (stockMap[key] || 0) + p.quantity;
+  });
+
+  let rows = '';
+  order.items.forEach((item, idx) => {
+    const stockKey = [item.productType, item.size, item.color, item.hookSize || ''].join('|');
+    const inStock  = stockMap[stockKey] || 0;
+    const warn     = inStock < item.quantity;
+    const capQty   = Math.max(0, Math.min(item.quantity, inStock));
+    const warnBadge = warn
+      ? `<span style="color:#e87070;font-size:10px;margin-left:6px" title="Only ${inStock} in stock">⚠ ${inStock} avail</span>`
+      : '';
+
+    rows += `<tr>
+      <td style="padding:6px 8px"><input type="checkbox" id="ship-chk-${orderId}-${idx}" checked onchange="shipChkChanged('${orderId}',${idx})"></td>
+      <td class="muted">${item.sku}</td>
+      <td>${item.productType}</td>
+      <td>${item.size}</td>
+      <td>${item.color}</td>
+      <td>${item.hookSize || '—'}</td>
+      <td class="num">${item.quantity}</td>
+      <td style="padding:4px 8px">
+        <input type="number" id="ship-qty-${orderId}-${idx}" min="0" max="${item.quantity}" value="${warn ? capQty : item.quantity}"
+          style="width:65px;${warn ? 'border-color:#e87070' : ''}">
+        ${warnBadge}
+      </td>
+    </tr>`;
+  });
+
+  panel.innerHTML = `
+    <div style="background:#0e1f30;border:1px solid #1a3050;border-top:none;border-radius:0 0 4px 4px;padding:12px 14px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="color:#4cdf8d;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase">Ship Order — ${order.shop}</span>
+        <span class="muted" style="font-size:11px">Check items to ship, adjust quantities if needed</span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th style="width:30px"></th><th>SKU</th><th>Product</th><th>Size</th><th>Color</th><th>Hook</th><th>Order Qty</th><th>Ship Qty</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <div style="display:flex;gap:10px;margin-top:10px;align-items:center">
+        <button class="btn btn-gold" onclick="confirmShipOrder('${order.id}')">Confirm Shipment</button>
+        <button class="btn" onclick="document.getElementById('ship-panel-${order.id}').style.display='none'">Cancel</button>
+      </div>
+    </div>`;
+  panel.style.display = 'block';
+}
+
+function shipChkChanged(orderId, idx) {
+  const chk = document.getElementById('ship-chk-' + orderId + '-' + idx);
+  const qty = document.getElementById('ship-qty-' + orderId + '-' + idx);
+  if (!chk.checked) qty.value = 0;
+}
+
+function confirmShipOrder(orderId) {
+  const data  = load();
+  const order = data.orders.find(o => o.id === orderId);
+  if (!order) return;
+
+  // Collect ship quantities per item
+  const shipItems = [];
+  order.items.forEach((item, idx) => {
+    const chk = document.getElementById('ship-chk-' + orderId + '-' + idx);
+    const qtyEl = document.getElementById('ship-qty-' + orderId + '-' + idx);
+    if (!chk || !chk.checked) return;
+    const shipQty = Math.min(Math.max(0, parseInt(qtyEl.value) || 0), item.quantity);
+    if (shipQty > 0) shipItems.push({ idx, shipQty });
+  });
+
+  if (!shipItems.length) { showToast('No items selected to ship', 'error'); return; }
+
+  const totalShipping = shipItems.reduce((s, si) => s + si.shipQty, 0);
+  const summary = shipItems.map(si => {
+    const item = order.items[si.idx];
+    return `${si.shipQty}× ${item.sku} (${item.color} ${item.size})`;
+  }).join('\n');
+
+  if (!confirm(`Ship ${totalShipping} heads from "${order.shop}"?\n\n${summary}\n\nThis will deduct from stock and update the order.`)) return;
+
+  const now = new Date().toISOString();
+
+  // Process each shipped item: create negative pour records to deduct from stock
+  const remainingItems = [];
+  order.items.forEach((item, idx) => {
+    const shipped = shipItems.find(si => si.idx === idx);
+    if (!shipped) {
+      remainingItems.push(item);
+      return;
+    }
+
+    // Create negative pour record (deducts from "In Stock" totals)
+    data.pours.unshift({
+      id:          Date.now().toString(36) + Math.random().toString(36).slice(2),
+      date:        now,
+      productType: item.productType,
+      size:        item.size,
+      color:       item.color,
+      quantity:    -shipped.shipQty,
+      hookSize:    item.hookSize || null,
+      deductions:  {},
+      isShipment:  true,
+      linkedOrderId: orderId,
+      shop:        order.shop,
+    });
+
+    // If partially shipped, keep the remainder
+    if (shipped.shipQty < item.quantity) {
+      const remaining = { ...item, quantity: item.quantity - shipped.shipQty };
+      remaining.components = calcDeductionsForSku(SKU_TABLE[item.sku] || item, remaining.quantity);
+      remainingItems.push(remaining);
+    }
+  });
+
+  // Update order items to only the remaining
+  order.items = remainingItems;
+
+  // If no items remain, archive the order
+  if (!order.items.length) {
+    order.archived = true;
+    order.status = 'shipped';
+  }
+
+  save(data);
+  showToast(`Shipped ${totalShipping} heads for ${order.shop}`);
   renderOrders();
 }
 
