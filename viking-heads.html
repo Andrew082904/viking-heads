@@ -1288,7 +1288,7 @@ function renderSwingheads() {
 
   let html = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>Size</th><th>Hook</th><th>In Stock</th><th>Adjust Stock</th>
+      <th>Size</th><th>Hook</th><th>In Stock (Heads)</th><th>Adjust Stock</th>
     </tr></thead><tbody>`;
 
   SWINGHEAD_COLORS.forEach((color, ci) => {
@@ -1327,7 +1327,7 @@ function renderFinesse() {
 
   let html = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>Size</th><th>Hook</th><th>In Stock</th><th>Adjust Stock</th>
+      <th>Size</th><th>Hook</th><th>In Stock (Heads)</th><th>Adjust Stock</th>
     </tr></thead><tbody>`;
 
   FINESSE_COLORS.forEach((color, ci) => {
@@ -1839,8 +1839,10 @@ function renderGenericPage(id) {
   const isUppc = cfg.colors.length === 1 && cfg.colors[0] === 'Mixed';
   let html = '';
 
+  const stockLabel = isUppc ? 'In Stock (Packs)' : isRig ? 'In Stock' : 'In Stock (Heads)';
+
   if (isRig) {
-    html = `<div class="table-wrap"><table><thead><tr><th>Color</th><th>In Stock</th><th>Adjust Stock</th></tr></thead><tbody>`;
+    html = `<div class="table-wrap"><table><thead><tr><th>Color</th><th>${stockLabel}</th><th>Adjust Stock</th></tr></thead><tbody>`;
     cfg.colors.forEach((color, ci) => {
       const totalQty = pours.filter(p => p.color === color).reduce((s, p) => s + p.quantity, 0);
       const inputId  = `adj-${id}-${ci}`;
@@ -1855,7 +1857,7 @@ function renderGenericPage(id) {
     html += '</tbody></table></div>';
 
   } else if (isUppc) {
-    html = `<div class="table-wrap"><table><thead><tr><th>Size</th><th>In Stock</th><th>Adjust Stock</th></tr></thead><tbody>`;
+    html = `<div class="table-wrap"><table><thead><tr><th>Size</th><th>${stockLabel}</th><th>Adjust Stock</th></tr></thead><tbody>`;
     cfg.sizes.forEach((size, si) => {
       const totalQty = pours.filter(p => p.size === size).reduce((s, p) => s + p.quantity, 0);
       const inputId  = `adj-${id}-${si}`;
@@ -1871,7 +1873,7 @@ function renderGenericPage(id) {
 
   } else {
     const colCount = cfg.hasHook ? 4 : 3;
-    html = `<div class="table-wrap"><table><thead><tr><th>Size</th>${cfg.hasHook ? '<th>Hook</th>' : ''}<th>In Stock</th><th>Adjust Stock</th></tr></thead><tbody>`;
+    html = `<div class="table-wrap"><table><thead><tr><th>Size</th>${cfg.hasHook ? '<th>Hook</th>' : ''}<th>${stockLabel}</th><th>Adjust Stock</th></tr></thead><tbody>`;
     cfg.colors.forEach((color, ci) => {
       html += `<tr class="color-group-header"><td colspan="${colCount}">${color}</td></tr>`;
       cfg.sizes.forEach((size, si) => {
