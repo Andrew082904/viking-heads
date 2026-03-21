@@ -486,6 +486,7 @@
 </header>
 
 <nav>
+  <button id="tab-dashboard"   onclick="showPage('dashboard')">Dashboard</button>
   <button id="tab-swingheads" onclick="showPage('swingheads')">Swingheads</button>
   <button id="tab-finesse"     onclick="showPage('finesse')">Finesse Heads</button>
   <button id="tab-vkhead"      onclick="showPage('vkhead')">VK Head</button>
@@ -635,6 +636,14 @@
     <p>Permanently reset all component quantities to 0 and delete all pour history.</p>
     <button class="btn btn-danger" onclick="clearAllData()">Clear All Data</button>
   </div>
+</div>
+
+<!-- DASHBOARD PAGE -->
+<div id="page-dashboard" class="page">
+  <div class="page-header">
+    <div class="page-title">Dashboard</div>
+  </div>
+  <div id="dashboard-content"></div>
 </div>
 
 <!-- ORDERS PAGE -->
@@ -1061,7 +1070,7 @@ function deductionLine(deductions) {
 // PAGE ROUTING
 // ============================================================
 
-let activePage = 'swingheads';
+let activePage = 'dashboard';
 const formOpen = { swingheads: false, finesse: false };
 
 function showPage(name) {
@@ -1074,7 +1083,8 @@ function showPage(name) {
 }
 
 function render(name) {
-  if (name === 'swingheads')  renderSwingheads();
+  if (name === 'dashboard')   renderDashboard();
+  else if (name === 'swingheads')  renderSwingheads();
   else if (name === 'finesse')      renderFinesse();
   else if (name === 'vkhead')       renderGenericPage('vkhead');
   else if (name === 'weedguard')    renderGenericPage('weedguard');
@@ -1086,6 +1096,186 @@ function render(name) {
   else if (name === 'orders')       renderOrders();
   else if (name === 'alerts')       renderAlerts();
   else if (name === 'data')         updateApiKeyStatus();
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+
+function renderDashboard() {
+  const data = load();
+  const wrap = document.getElementById('dashboard-content');
+  if (!wrap) return;
+
+  const now = new Date(); now.setHours(0,0,0,0);
+  const activeOrders = data.orders.filter(o => !o.archived);
+  const pendingOrders = activeOrders.filter(o => o.status === 'pending');
+  const pouredOrders  = activeOrders.filter(o => o.status === 'poured');
+  const partialOrders = activeOrders.filter(o => o.status === 'partial');
+
+  // Overdue & due soon
+  const overdueOrders = activeOrders.filter(o =>
+    o.status !== 'shipped' && new Date(o.dueDate + 'T00:00:00') < now
+  );
+  const dueSoonOrders = activeOrders.filter(o => {
+    if (o.status === 'shipped') return false;
+    const days = Math.round((new Date(o.dueDate + 'T00:00:00') - now) / 86400000);
+    return days >= 0 && days <= 3;
+  });
+
+  // Total heads across active orders
+  const totalHeads = activeOrders.reduce((s, o) => s + o.items.reduce((ss, i) => ss + i.quantity, 0), 0);
+
+  // Component alerts
+  const threshold = getLowStockThreshold();
+  const lowStockCount = COMPONENTS.filter(def => (data.components[def.key] || 0) < threshold).length;
+
+  // Recent pours (last 7 days)
+  const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
+  const recentPours = data.pours.filter(p => !p.isShipment && !p.isAdjustment && new Date(p.date) >= weekAgo);
+  const recentHeadsPoured = recentPours.reduce((s, p) => s + p.quantity, 0);
+
+  // Recent shipments (last 7 days)
+  const recentShipments = data.pours.filter(p => p.isShipment && new Date(p.date) >= weekAgo);
+  const recentHeadsShipped = Math.abs(recentShipments.reduce((s, p) => s + p.quantity, 0));
+
+  // ---- Summary cards ----
+  let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">`;
+
+  const card = (label, value, color, sub) => `
+    <div style="background:#0e1f30;border:1px solid #1a3050;border-radius:4px;padding:14px 16px">
+      <div style="color:#5a7a9a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px">${label}</div>
+      <div style="color:${color};font-size:24px;font-weight:bold;letter-spacing:1px">${value}</div>
+      ${sub ? `<div class="muted" style="font-size:11px;margin-top:2px">${sub}</div>` : ''}
+    </div>`;
+
+  html += card('Active Orders', activeOrders.length, '#c9d8e8',
+    `${pendingOrders.length} pending · ${pouredOrders.length} poured${partialOrders.length ? ` · ${partialOrders.length} partial` : ''}`);
+  html += card('Total Heads', totalHeads, '#c9a227', 'across active orders');
+  html += card('Poured (7d)', recentHeadsPoured, '#4caf7d', `${recentPours.length} pours`);
+  html += card('Shipped (7d)', recentHeadsShipped, '#4cdf8d', `${recentShipments.length} shipments`);
+  html += card('Overdue', overdueOrders.length, overdueOrders.length ? '#f09090' : '#4caf7d',
+    overdueOrders.length ? 'orders past due date' : 'none');
+  html += card('Low Stock', lowStockCount, lowStockCount ? '#e09050' : '#4caf7d',
+    lowStockCount ? 'components below threshold' : 'all good');
+
+  html += `</div>`;
+
+  // ---- Urgent orders ----
+  if (overdueOrders.length || dueSoonOrders.length) {
+    html += `<div style="margin-bottom:20px">
+      <div style="color:#8aadcf;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px">Urgent Orders</div>`;
+    [...overdueOrders, ...dueSoonOrders].forEach(o => {
+      const days = Math.round((new Date(o.dueDate + 'T00:00:00') - now) / 86400000);
+      const heads = o.items.reduce((s, i) => s + i.quantity, 0);
+      const isOverdue = days < 0;
+      html += `<div style="padding:8px 12px;background:${isOverdue ? '#2a0a0a' : '#1a1400'};border:1px solid ${isOverdue ? '#5a2020' : '#4a3a00'};border-radius:4px;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="color:#c9a227;font-weight:bold;letter-spacing:1px">${o.shop.toUpperCase()}</span>
+        <span class="${isOverdue ? 'badge-overdue' : 'badge-due-soon'}">${isOverdue ? `OVERDUE ${Math.abs(days)}d` : `DUE IN ${days}d`}</span>
+        <span class="muted" style="font-size:11px">${heads} heads · ${o.status}</span>
+        <span style="flex:1"></span>
+        <button class="btn btn-sm" onclick="showPage('orders')">View</button>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // ---- Shop history ----
+  const allOrders = data.orders;
+  const shopMap = {};
+  allOrders.forEach(o => {
+    if (!shopMap[o.shop]) shopMap[o.shop] = { orders: [], totalHeads: 0, shipped: 0, active: 0 };
+    shopMap[o.shop].orders.push(o);
+    const heads = o.items.reduce((s, i) => s + i.quantity, 0);
+    shopMap[o.shop].totalHeads += heads;
+    if (o.archived || o.status === 'shipped') shopMap[o.shop].shipped++;
+    else shopMap[o.shop].active++;
+  });
+
+  // Sort shops by total heads descending
+  const shopList = Object.entries(shopMap).sort((a, b) => b[1].totalHeads - a[1].totalHeads);
+
+  if (shopList.length) {
+    html += `<div style="margin-bottom:20px">
+      <div style="color:#8aadcf;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px">Shop History</div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Shop</th><th>Total Orders</th><th>Active</th><th>Shipped/Archived</th><th>Total Heads</th><th>Last Order</th><th></th>
+        </tr></thead><tbody>`;
+    shopList.forEach(([shop, info]) => {
+      const lastOrder = info.orders.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      const lastDate = lastOrder ? fmtDate(lastOrder.createdAt) : '—';
+      html += `<tr>
+        <td style="color:#c9a227;font-weight:bold;letter-spacing:1px">${shop}</td>
+        <td class="num">${info.orders.length}</td>
+        <td class="num">${info.active}</td>
+        <td class="num">${info.shipped}</td>
+        <td class="num">${info.totalHeads}</td>
+        <td class="muted">${lastDate}</td>
+        <td><button class="btn btn-sm" onclick="showShopDetail('${shop.replace(/'/g, "\\'")}')">Details</button></td>
+      </tr>`;
+    });
+    html += `</tbody></table></div></div>`;
+  }
+
+  wrap.innerHTML = html;
+}
+
+function showShopDetail(shop) {
+  const data = load();
+  const orders = data.orders.filter(o => o.shop === shop).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  if (!orders.length) return;
+
+  const totalHeads = orders.reduce((s, o) => s + o.items.reduce((ss, i) => ss + i.quantity, 0), 0);
+
+  // Aggregate SKUs across all orders for this shop
+  const skuTotals = {};
+  orders.forEach(o => o.items.forEach(i => {
+    skuTotals[i.sku] = (skuTotals[i.sku] || 0) + i.quantity;
+  }));
+  const topSkus = Object.entries(skuTotals).sort((a, b) => b[1] - a[1]).slice(0, 15);
+
+  let html = `<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.remove()">
+    <div style="background:#0a1520;border:1px solid #1a3050;border-radius:6px;padding:20px;max-width:700px;width:100%;max-height:85vh;overflow-y:auto" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="color:#c9a227;font-size:16px;font-weight:bold;letter-spacing:2px">${shop.toUpperCase()}</div>
+        <button class="btn btn-sm" onclick="this.closest('[style*=fixed]').remove()">✕ Close</button>
+      </div>
+      <div style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap">
+        <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Total Orders</span><div style="font-size:20px;color:#c9d8e8">${orders.length}</div></div>
+        <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Total Heads</span><div style="font-size:20px;color:#c9a227">${totalHeads}</div></div>
+        <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">First Order</span><div style="font-size:14px;color:#c9d8e8">${fmtDate(orders[orders.length - 1].createdAt)}</div></div>
+        <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Last Order</span><div style="font-size:14px;color:#c9d8e8">${fmtDate(orders[0].createdAt)}</div></div>
+      </div>`;
+
+  // Top SKUs
+  if (topSkus.length) {
+    html += `<div style="color:#8aadcf;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px">Top SKUs Ordered</div>
+      <div class="table-wrap"><table><thead><tr><th>SKU</th><th>Product</th><th>Size</th><th>Color</th><th>Total Qty</th></tr></thead><tbody>`;
+    topSkus.forEach(([sku, qty]) => {
+      const def = SKU_TABLE[sku] || {};
+      html += `<tr><td class="muted">${sku}</td><td>${def.productType || '—'}</td><td>${def.size || '—'}</td><td>${def.color || '—'}</td><td class="num">${qty}</td></tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  // Order history
+  html += `<div style="color:#8aadcf;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin:16px 0 6px">Order History</div>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Status</th><th>Items</th><th>Heads</th><th>Due</th></tr></thead><tbody>`;
+  orders.forEach(o => {
+    const heads = o.items.reduce((s, i) => s + i.quantity, 0);
+    const statusColor = { pending: '#e8a020', poured: '#4caf7d', partial: '#e8a870', shipped: '#4cdf8d' }[o.status] || '#5a7a9a';
+    html += `<tr${o.archived ? ' style="opacity:.6"' : ''}>
+      <td class="muted">${fmtDate(o.createdAt)}</td>
+      <td style="color:${statusColor};font-size:10px;letter-spacing:1px;text-transform:uppercase">${o.status}${o.archived ? ' (archived)' : ''}</td>
+      <td class="num">${o.items.length}</td>
+      <td class="num">${heads}</td>
+      <td class="muted">${o.dueDate}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div></div></div>`;
+
+  document.body.insertAdjacentHTML('beforeend', html);
 }
 
 // ============================================================
@@ -1416,8 +1606,19 @@ function renderComponents() {
 function updateAlertBadge() {
   const data      = load();
   const threshold = getLowStockThreshold();
-  const count     = COMPONENTS.filter(def => (data.components[def.key] || 0) < threshold).length;
-  const badge     = document.getElementById('alert-badge');
+  const lowStock  = COMPONENTS.filter(def => (data.components[def.key] || 0) < threshold).length;
+
+  // Count overdue orders (pending or partial, past due date)
+  const now = new Date(); now.setHours(0,0,0,0);
+  const overdueCount = data.orders.filter(o =>
+    !o.archived && o.status !== 'poured' && o.status !== 'shipped'
+  ).reduce((sum, o) => {
+    const due = new Date(o.dueDate + 'T00:00:00');
+    return sum + (due < now ? 1 : 0);
+  }, 0);
+
+  const count = lowStock + overdueCount;
+  const badge = document.getElementById('alert-badge');
   if (!badge) return;
   if (count > 0) {
     badge.textContent = count;
@@ -1456,28 +1657,77 @@ function renderAlerts() {
   const tableDiv = document.getElementById('alerts-table');
   if (!tableDiv) return;
 
-  if (lowItems.length === 0) {
-    tableDiv.innerHTML = '<div class="alerts-empty">✓ ALL COMPONENTS ARE ABOVE THE THRESHOLD — NO ALERTS</div>';
+  // Overdue orders section
+  const now = new Date(); now.setHours(0,0,0,0);
+  const overdueOrders = data.orders.filter(o => {
+    if (o.archived || o.status === 'poured' || o.status === 'shipped') return false;
+    return new Date(o.dueDate + 'T00:00:00') < now;
+  });
+  const dueSoonOrders = data.orders.filter(o => {
+    if (o.archived || o.status === 'poured' || o.status === 'shipped') return false;
+    const days = Math.round((new Date(o.dueDate + 'T00:00:00') - now) / 86400000);
+    return days >= 0 && days <= 3;
+  });
+
+  let overdueHtml = '';
+  if (overdueOrders.length || dueSoonOrders.length) {
+    overdueHtml += `<div style="margin-bottom:20px">`;
+    if (overdueOrders.length) {
+      overdueHtml += `<div style="color:#f09090;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">🔴 ${overdueOrders.length} Overdue Order${overdueOrders.length > 1 ? 's' : ''}</div>`;
+      overdueOrders.forEach(o => {
+        const days = Math.abs(Math.round((new Date(o.dueDate + 'T00:00:00') - now) / 86400000));
+        const heads = o.items.reduce((s, i) => s + i.quantity, 0);
+        overdueHtml += `<div style="padding:6px 12px;background:#2a0a0a;border:1px solid #5a2020;border-radius:4px;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="color:#c9a227;font-weight:bold;letter-spacing:1px">${o.shop.toUpperCase()}</span>
+          <span class="badge-overdue">OVERDUE ${days}d</span>
+          <span class="muted" style="font-size:11px">${heads} heads · ${o.status}</span>
+          <span style="flex:1"></span>
+          <button class="btn btn-sm" onclick="showPage('orders')">Go to Orders</button>
+        </div>`;
+      });
+    }
+    if (dueSoonOrders.length) {
+      overdueHtml += `<div style="color:#f5d070;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin:12px 0 8px">⚠ ${dueSoonOrders.length} Due Soon</div>`;
+      dueSoonOrders.forEach(o => {
+        const days = Math.round((new Date(o.dueDate + 'T00:00:00') - now) / 86400000);
+        const heads = o.items.reduce((s, i) => s + i.quantity, 0);
+        overdueHtml += `<div style="padding:6px 12px;background:#1a1400;border:1px solid #4a3a00;border-radius:4px;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="color:#c9a227;font-weight:bold;letter-spacing:1px">${o.shop.toUpperCase()}</span>
+          <span class="badge-due-soon">DUE IN ${days}d</span>
+          <span class="muted" style="font-size:11px">${heads} heads · ${o.status}</span>
+          <span style="flex:1"></span>
+          <button class="btn btn-sm" onclick="showPage('orders')">Go to Orders</button>
+        </div>`;
+      });
+    }
+    overdueHtml += `</div>`;
+  }
+
+  if (lowItems.length === 0 && !overdueOrders.length && !dueSoonOrders.length) {
+    tableDiv.innerHTML = '<div class="alerts-empty">✓ NO ALERTS — ALL COMPONENTS ABOVE THRESHOLD, NO OVERDUE ORDERS</div>';
     return;
   }
 
-  let html = `<div class="table-wrap"><table>
-    <thead><tr>
-      <th>Component</th><th>Size</th><th>Qty On Hand</th><th>Threshold</th><th>Shortfall</th>
-    </tr></thead><tbody>`;
+  let html = overdueHtml;
 
-  lowItems.forEach(({ def, qty }) => {
-    const shortfall = threshold - qty;
-    html += `<tr>
-      <td>${def.label}</td>
-      <td>${def.size}</td>
-      <td class="num low-stock">${qty} ⚠</td>
-      <td class="num">${threshold}</td>
-      <td class="num" style="color:#e05050">${shortfall}</td>
-    </tr>`;
-  });
+  if (lowItems.length) {
+    html += `<div class="table-wrap"><table>
+      <thead><tr>
+        <th>Component</th><th>Size</th><th>Qty On Hand</th><th>Threshold</th><th>Shortfall</th>
+      </tr></thead><tbody>`;
+    lowItems.forEach(({ def, qty }) => {
+      const shortfall = threshold - qty;
+      html += `<tr>
+        <td>${def.label}</td>
+        <td>${def.size}</td>
+        <td class="num low-stock">${qty} ⚠</td>
+        <td class="num">${threshold}</td>
+        <td class="num" style="color:#e05050">${shortfall}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
 
-  html += '</tbody></table></div>';
   tableDiv.innerHTML = html;
 }
 
@@ -2668,7 +2918,7 @@ function sortedOrders(orders) {
     case 'due_desc':     return arr.sort((a, b) => b.dueDate.localeCompare(a.dueDate));
     case 'shop_az':      return arr.sort((a, b) => a.shop.localeCompare(b.shop));
     case 'heads_desc':   return arr.sort((a, b) => b.items.reduce((s,i)=>s+i.quantity,0) - a.items.reduce((s,i)=>s+i.quantity,0));
-    case 'status':       return arr.sort((a, b) => (a.status === 'poured' ? 1 : 0) - (b.status === 'poured' ? 1 : 0));
+    case 'status':       { const rank = { pending: 0, partial: 1, poured: 2, shipped: 3 }; return arr.sort((a, b) => (rank[a.status]||0) - (rank[b.status]||0)); }
     default:             return arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 }
@@ -2922,31 +3172,36 @@ function canFulfillOrder(order) {
 }
 
 function renderOrderCard(order) {
-  const isPoured    = order.status === 'poured';
+  const isPoured  = order.status === 'poured';
+  const isPartial = order.status === 'partial';
+  const canShip   = isPoured || isPartial;
   const statusBadge = isPoured
     ? `<span style="color:#4caf7d;font-size:10px;letter-spacing:1px">POURED</span>`
-    : `<span style="color:#e8a020;font-size:10px;letter-spacing:1px">PENDING</span>`;
-  const pourBtn = isPoured
-    ? `<span style="color:#3a5a7a;font-size:11px">Poured</span>`
+    : isPartial
+      ? `<span style="color:#e8a870;font-size:10px;letter-spacing:1px">PARTIAL</span>`
+      : `<span style="color:#e8a020;font-size:10px;letter-spacing:1px">PENDING</span>`;
+  const pourBtn = canShip
+    ? `<span style="color:#3a5a7a;font-size:11px">${isPartial ? 'Partial' : 'Poured'}</span>`
     : `<button class="btn btn-gold btn-sm" onclick="event.stopPropagation();markOrderPoured('${order.id}')">Mark as Poured</button>`;
-  const shipBtn = isPoured
+  const shipBtn = canShip
     ? `<button class="btn btn-sm" style="background:#0a3020;border-color:#1a6040;color:#4cdf8d" onclick="event.stopPropagation();showShipPanel('${order.id}')">📦 Ship</button>`
     : '';
 
   const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
   const skuCount = order.items.length;
 
-  // Due date badge
+  // Due date badge (show on pending and partial orders)
+  const showDueBadge = !isPoured || isPartial;
   const dueDays  = orderDueDays(order);
-  const dueBadge = !isPoured && dueDays < 0
+  const dueBadge = showDueBadge && dueDays < 0
     ? `<span class="badge-overdue">OVERDUE ${Math.abs(dueDays)}d</span>`
-    : !isPoured && dueDays <= 3
+    : showDueBadge && dueDays <= 3
       ? `<span class="badge-due-soon">DUE IN ${dueDays}d</span>`
       : '';
 
   // Fulfillment badge (pending orders only)
   let fulfillBadge = '';
-  if (!isPoured) {
+  if (!isPoured && !isPartial) {
     const fc = canFulfillOrder(order);
     fulfillBadge = fc.ok
       ? `<span class="badge-can-fulfill" title="Stock is sufficient">✅ CAN FULFILL</span>`
@@ -3047,7 +3302,7 @@ function markOrderPoured(orderId) {
 function showShipPanel(orderId) {
   const data  = load();
   const order = data.orders.find(o => o.id === orderId);
-  if (!order || order.status !== 'poured') return;
+  if (!order || (order.status !== 'poured' && order.status !== 'partial')) return;
 
   const panel = document.getElementById('ship-panel-' + orderId);
   if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
@@ -3173,10 +3428,12 @@ function confirmShipOrder(orderId) {
   // Update order items to only the remaining
   order.items = remainingItems;
 
-  // If no items remain, archive the order
+  // If no items remain, archive the order; otherwise mark partial
   if (!order.items.length) {
     order.archived = true;
     order.status = 'shipped';
+  } else {
+    order.status = 'partial';
   }
 
   save(data);
@@ -3967,7 +4224,7 @@ async function initApp() {
   // Always load from localStorage first so the UI renders immediately on any device
   const raw = localStorage.getItem('vikingHeads');
   _dataCache = raw ? applyMigrations(JSON.parse(raw)) : defaultData();
-  showPage('swingheads');
+  showPage('dashboard');
   updateAlertBadge();
 
   // Firebase sync runs in the background — never blocks the initial render
