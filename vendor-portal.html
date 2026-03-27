@@ -75,7 +75,15 @@ table.catalog .price{color:var(--gold);font-weight:bold}
 table.catalog .line-total{color:var(--green);font-weight:bold;min-width:60px}
 input.qty-input{width:64px;padding:8px 6px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:.95rem;font-weight:bold}
 input.qty-input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 2px rgba(201,162,39,.2)}
-input.qty-input::-webkit-inner-spin-button{opacity:1;height:24px}
+input.qty-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input.qty-input[type=number]{-moz-appearance:textfield}
+.qty-wrap{display:inline-flex;align-items:center;gap:0}
+.qty-btn{width:32px;height:34px;background:var(--bg3);border:1px solid var(--border);color:var(--gold);font-size:1.1rem;font-weight:bold;cursor:pointer;transition:background .15s;line-height:1}
+.qty-btn:first-child{border-radius:var(--radius) 0 0 var(--radius);border-right:none}
+.qty-btn:last-child{border-radius:0 var(--radius) var(--radius) 0;border-left:none}
+.qty-btn:hover{background:var(--gold);color:#000}
+.qty-btn:active{transform:scale(.95)}
+.qty-wrap .qty-input{border-radius:0;width:56px}
 
 /* ── Sidebar ── */
 .sidebar h3{color:var(--gold);font-size:.95rem;letter-spacing:2px;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border)}
@@ -409,7 +417,7 @@ function buildCatalog() {
     sec.className = 'cat-section';
     sec.id = 'sec-' + cat.id;
 
-    let html = `<h2>${cat.title}</h2><div class="desc">${cat.desc}</div>`;
+    let html = `<h2>${cat.title}</h2>`;
 
     cat.colors.forEach(color => {
       html += `<div class="color-group"><h3>${color}</h3>`;
@@ -429,11 +437,15 @@ function buildCatalog() {
           <td>${sz.hook}</td>
           <td class="price">$${price.toFixed(2)}</td>
           <td style="text-align:center">
-            <input type="number" class="qty-input" min="0" value="0"
-              data-sku="${escHtml(skuKey)}" data-price="${price}"
-              data-cat="${escHtml(cat.title)}" data-color="${escHtml(color)}"
-              data-size="${escHtml(sz.size)}" data-hook="${escHtml(sz.hook)}"
-              oninput="updateLine(this)">
+            <div class="qty-wrap">
+              <button class="qty-btn" onclick="adjustQty(this,-1)">−</button>
+              <input type="number" class="qty-input" min="0" value="0"
+                data-sku="${escHtml(skuKey)}" data-price="${price}"
+                data-cat="${escHtml(cat.title)}" data-color="${escHtml(color)}"
+                data-size="${escHtml(sz.size)}" data-hook="${escHtml(sz.hook)}"
+                oninput="updateLine(this)">
+              <button class="qty-btn" onclick="adjustQty(this,1)">+</button>
+            </div>
           </td>
           <td class="line-total" style="text-align:right" id="lt-${hashCode(skuKey)}">—</td>
         </tr>`;
@@ -600,6 +612,13 @@ function startNewOrder() {
 /* ──────────────────────────────────────────────
    UTILS
    ────────────────────────────────────────────── */
+function adjustQty(btn, delta) {
+  const input = btn.parentElement.querySelector('.qty-input');
+  const val = Math.max(0, (parseInt(input.value) || 0) + delta);
+  input.value = val;
+  updateLine(input);
+}
+
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
