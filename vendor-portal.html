@@ -184,6 +184,7 @@ input.qty-input[type=number]{-moz-appearance:textfield}
     <input type="text" id="accessCode" placeholder="Enter your access code" autocomplete="off">
     <div class="login-error" id="loginError">&nbsp;</div>
     <button class="btn-gold" onclick="attemptLogin()">SIGN IN</button>
+    <div style="margin-top:16px"><a href="#" onclick="forgotCode(event)" style="color:var(--text-dim);font-size:.8rem">Forgot your access code?</a></div>
   </div>
 </div>
 
@@ -669,6 +670,14 @@ function startNewOrder() {
 /* ──────────────────────────────────────────────
    UTILS
    ────────────────────────────────────────────── */
+function forgotCode(e) {
+  e.preventDefault();
+  const shop = document.getElementById('shopSelect').value || 'my shop';
+  const subject = encodeURIComponent('Access Code Request - ' + shop);
+  const body = encodeURIComponent('Hi Viking Heads,\n\nI need my vendor portal access code for: ' + shop + '\n\nThank you');
+  window.location.href = 'mailto:vikingheadbaits@gmail.com?subject=' + subject + '&body=' + body;
+}
+
 function adjustQty(btn, delta) {
   const input = btn.parentElement.querySelector('.qty-input');
   const val = Math.max(0, (parseInt(input.value) || 0) + delta);
