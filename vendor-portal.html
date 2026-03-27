@@ -83,18 +83,19 @@ header .shop-label strong{color:var(--text)}
 @media(max-width:640px){
   table.catalog thead{display:none}
   table.catalog,table.catalog tbody,table.catalog tr,table.catalog td{display:block;width:100%}
-  table.catalog tr{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;align-items:center}
+  table.catalog tr{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin-bottom:4px;display:grid;grid-template-columns:auto auto 1fr;grid-template-rows:auto auto;gap:2px 10px;align-items:center}
   table.catalog tr:hover td{background:transparent}
-  table.catalog td{border:none;padding:2px 0;font-size:.85rem}
-  table.catalog td:nth-child(1)::before{content:'Size: ';color:var(--text-dim);font-size:.7rem}
-  table.catalog td:nth-child(2)::before{content:'Hook: ';color:var(--text-dim);font-size:.7rem}
-  table.catalog td:nth-child(3)::before{content:'Price: ';color:var(--text-dim);font-size:.7rem}
-  table.catalog td:nth-child(4){grid-column:1 / -1;justify-self:center;padding-top:6px}
-  table.catalog td:nth-child(5){grid-column:1 / -1;text-align:center;padding-top:2px}
-  .qty-btn{width:40px;height:42px;font-size:1.3rem}
-  .qty-wrap .qty-input{width:60px;height:42px;font-size:1.1rem}
-  .color-group h3{font-size:.85rem;padding:10px 12px}
-  .cat-section h2{font-size:1rem}
+  table.catalog td{border:none;padding:1px 0;font-size:.8rem}
+  table.catalog td:nth-child(1){grid-row:1;grid-column:1;font-weight:bold}
+  table.catalog td:nth-child(2){grid-row:1;grid-column:2;color:var(--text-dim)}
+  table.catalog td:nth-child(3){grid-row:1;grid-column:3;text-align:right}
+  table.catalog td:nth-child(4){grid-row:2;grid-column:1 / -1;padding-top:4px;display:flex;align-items:center;justify-content:space-between}
+  table.catalog td:nth-child(5){display:none}
+  .qty-btn{width:36px;height:36px;font-size:1.2rem}
+  .qty-wrap .qty-input{width:50px;height:36px;font-size:1rem}
+  .color-group{margin-bottom:12px}
+  .color-group h3{font-size:.8rem;padding:6px 10px}
+  .cat-section h2{font-size:.95rem;margin-bottom:2px}
   .login-box{padding:32px 24px}
   .login-box h1{font-size:1.4rem}
   .modal{margin:10px;max-height:90vh;border-radius:8px}
@@ -114,7 +115,7 @@ header .shop-label strong{color:var(--text)}
 table.catalog{width:100%;border-collapse:collapse}
 table.catalog th{text-align:left;color:var(--text-dim);font-size:.75rem;letter-spacing:1px;padding:8px 10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg)}
 table.catalog td{padding:8px 10px;border-bottom:1px solid rgba(26,48,80,.4);font-size:.85rem;vertical-align:middle}
-table.catalog tr:hover td{background:rgba(201,162,39,.04)}
+@media(hover:hover){table.catalog tr:hover td{background:rgba(201,162,39,.04)}}
 table.catalog .price{color:var(--gold);font-weight:bold}
 table.catalog .line-total{color:var(--green);font-weight:bold;min-width:60px}
 input.qty-input{width:64px;padding:8px 6px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:.95rem;font-weight:bold}
