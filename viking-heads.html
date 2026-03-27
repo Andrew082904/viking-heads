@@ -174,6 +174,9 @@
     }
 
     .low-stock { color: #e8a020 !important; }
+    tr.stock-zero td { background: rgba(232,112,32,.06); }
+    tr.stock-negative td { background: rgba(232,80,80,.1); }
+    .stock-negative-val { color: #e87070; font-weight: bold; }
 
     /* ── Alert badge on nav tab ── */
     .alert-badge {
@@ -361,6 +364,9 @@
       -webkit-overflow-scrolling: touch;
       flex-wrap: nowrap;
       scrollbar-width: none;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
     nav::-webkit-scrollbar { display: none; }
 
@@ -524,7 +530,7 @@
 <!-- VK HEAD PAGE -->
 <div id="page-vkhead" class="page">
   <div class="page-header">
-    <div class="page-title">VK- Head</div>
+    <div class="page-title">VK-Head</div>
     <button class="btn btn-gold" onclick="toggleGenericForm('vkhead')">Log Pour</button>
   </div>
 
@@ -535,7 +541,7 @@
 <!-- WEEDGUARD HEAD PAGE -->
 <div id="page-weedguard" class="page">
   <div class="page-header">
-    <div class="page-title">VK- Weedguard Head</div>
+    <div class="page-title">VK-Weedguard Head</div>
     <button class="btn btn-gold" onclick="toggleGenericForm('weedguard')">Log Pour</button>
   </div>
 
@@ -589,6 +595,7 @@
   <div class="page-header">
     <div class="page-title">Pour History</div>
     <button class="btn" onclick="showUsageReport()">📊 Usage Report</button>
+    <button class="btn" onclick="exportPoursCsv()">⬇ Export CSV</button>
   </div>
   <div id="hist-filters"></div>
   <div id="hist-table"></div>
@@ -1013,7 +1020,7 @@ function compLabel(key) {
 }
 
 function hookKey(label) {
-  return 'hooks_' + label.replace('#', '');
+  return 'hooks_' + label.replace(/\/0$/, '').replace('#', '');
 }
 
 function calcSwingheadDeductions(size, qty) {
@@ -1061,6 +1068,7 @@ function checkShortfall(deductions) {
 }
 
 function deductionLine(deductions) {
+  if (!deductions || typeof deductions !== 'object') return '';
   return Object.entries(deductions)
     .map(([k, v]) => `${v} × ${compLabel(k)}`)
     .join('   |   ');
@@ -1489,10 +1497,12 @@ function renderSwingheads() {
         .reduce((sum, p) => sum + p.quantity, 0);
       const inputId = `adj-sh-${ci}-${si}`;
       const hookDisp = SWINGHEAD_MAP[size] ? SWINGHEAD_MAP[size].hookDisplay : '—';
-      html += `<tr>
+      const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
+      const valCls = totalQty < 0 ? ' stock-negative-val' : '';
+      html += `<tr${rowCls}>
         <td>${size}</td>
         <td>${hookDisp}</td>
-        <td class="num">${totalQty}</td>
+        <td class="num${valCls}">${totalQty}</td>
         <td>
           <span class="restock-wrap">
             <input type="number" id="${inputId}" placeholder="\u00b1qty">
@@ -1529,10 +1539,12 @@ function renderFinesse() {
           .filter(p => p.color === color && p.size === size && p.hookSize === hookLabel)
           .reduce((sum, p) => sum + p.quantity, 0);
         const inputId = `adj-fh-${ci}-${si}-${hi}`;
-        html += `<tr>
+        const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
+        const valCls = totalQty < 0 ? ' stock-negative-val' : '';
+        html += `<tr${rowCls}>
           <td>${size}</td>
           <td>${hookLabel}</td>
-          <td class="num">${totalQty}</td>
+          <td class="num${valCls}">${totalQty}</td>
           <td>
             <span class="restock-wrap">
               <input type="number" id="${inputId}" placeholder="\u00b1qty">
@@ -1749,6 +1761,9 @@ function adjustQty(productType, color, size, hookSize, inputId) {
   const qty = parseInt(el.value);
   if (isNaN(qty) || qty === 0) { alert('Enter a non-zero quantity (use negative to correct downward).'); return; }
   const data = load();
+  // Check if this would push stock negative
+  const currentStock = data.pours.filter(p => p.productType === productType && p.color === color && p.size === size && (hookSize === null || p.hookSize === hookSize)).reduce((s, p) => s + p.quantity, 0);
+  if (currentStock + qty < 0 && !confirm(`This will bring stock to ${currentStock + qty}. Continue?`)) return;
   data.pours.unshift({
     id: Date.now().toString(36) + Math.random().toString(36).slice(2),
     date: new Date().toISOString(),
@@ -1817,7 +1832,7 @@ function renderHistory() {
     <input type="date" value="${histFilterFrom}" onchange="setHistFilter('from',this.value)" style="width:130px">
     <label>To:</label>
     <input type="date" value="${histFilterTo}"   onchange="setHistFilter('to',this.value)"   style="width:130px">
-    ${hasFilter ? `<button class="btn btn-sm" onclick="clearHistFilters()">✕ Clear</button>` : ''}
+    <button class="btn btn-sm" onclick="clearHistFilters()"${hasFilter ? '' : ' style="opacity:.4"'}>✕ Clear</button>
   </div>`;
 
   // Apply filters
@@ -1856,6 +1871,29 @@ function renderHistory() {
 
   html += '</tbody></table></div>';
   document.getElementById('hist-table').innerHTML = html;
+}
+
+function exportPoursCsv() {
+  const data = load();
+  let pours = data.pours;
+  if (histFilterType) pours = pours.filter(p => p.productType === histFilterType);
+  if (histFilterSize) pours = pours.filter(p => p.size === histFilterSize);
+  if (histFilterFrom) pours = pours.filter(p => p.date.slice(0,10) >= histFilterFrom);
+  if (histFilterTo)   pours = pours.filter(p => p.date.slice(0,10) <= histFilterTo);
+
+  const rows = [['Date','Product','Size','Color','Hook','Qty','Type','Components'].join(',')];
+  pours.forEach(p => {
+    const type = p.isShipment ? 'Shipment' : p.isAdjustment ? 'Adjustment' : 'Pour';
+    const comps = deductionLine(p.deductions).replace(/,/g, ';');
+    rows.push([fmtDate(p.date), p.productType, p.size, p.color, p.hookSize || '', p.quantity, type, `"${comps}"`].join(','));
+  });
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `pour-history-${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast(`Exported ${pours.length} records`);
 }
 
 // ============================================================
@@ -1905,7 +1943,7 @@ function clearAllData() {
 
 const GENERIC_PAGE_CFG = {
   vkhead: {
-    title:    'VK- Head',
+    title:    'VK-Head',
     productType: 'VK Head',
     sizes:    VKH_SIZES,
     colors:   VKH_COLORS,
@@ -1915,7 +1953,7 @@ const GENERIC_PAGE_CFG = {
     calcDeductions: (size, qty) => calcVkhDeductions(size, qty),
   },
   weedguard: {
-    title:    'VK- Weedguard Head',
+    title:    'VK-Weedguard Head',
     productType: 'Weedguard Head',
     sizes:    VKH_SIZES,
     colors:   VKH_COLORS,
@@ -2092,16 +2130,18 @@ function renderGenericPage(id) {
   const isUppc = cfg.colors.length === 1 && cfg.colors[0] === 'Mixed';
   let html = '';
 
-  const stockLabel = isUppc ? 'In Stock (Packs)' : isRig ? 'In Stock' : 'In Stock (Heads)';
+  const stockLabel = isUppc ? 'In Stock (Packs)' : 'In Stock (Heads)';
 
   if (isRig) {
     html = `<div class="table-wrap"><table><thead><tr><th>Color</th><th>${stockLabel}</th><th>Adjust Stock</th></tr></thead><tbody>`;
     cfg.colors.forEach((color, ci) => {
       const totalQty = pours.filter(p => p.color === color).reduce((s, p) => s + p.quantity, 0);
       const inputId  = `adj-${id}-${ci}`;
-      html += `<tr>
+      const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
+      const valCls = totalQty < 0 ? ' stock-negative-val' : '';
+      html += `<tr${rowCls}>
         <td>${color}</td>
-        <td class="num">${totalQty}</td>
+        <td class="num${valCls}">${totalQty}</td>
         <td><span class="restock-wrap">
           <input type="number" id="${inputId}" placeholder="\u00b1qty">
           <button class="btn btn-sm" onclick="adjustGenericQty('${id}','${color}','5 ARM','${inputId}')">Add</button>
@@ -2114,9 +2154,11 @@ function renderGenericPage(id) {
     cfg.sizes.forEach((size, si) => {
       const totalQty = pours.filter(p => p.size === size).reduce((s, p) => s + p.quantity, 0);
       const inputId  = `adj-${id}-${si}`;
-      html += `<tr>
+      const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
+      const valCls = totalQty < 0 ? ' stock-negative-val' : '';
+      html += `<tr${rowCls}>
         <td>${size}</td>
-        <td class="num">${totalQty}</td>
+        <td class="num${valCls}">${totalQty}</td>
         <td><span class="restock-wrap">
           <input type="number" id="${inputId}" placeholder="\u00b1qty">
           <button class="btn btn-sm" onclick="adjustGenericQty('${id}','Mixed','${size}','${inputId}')">Add</button>
@@ -2133,10 +2175,12 @@ function renderGenericPage(id) {
         const totalQty = pours.filter(p => p.color === color && p.size === size).reduce((s, p) => s + p.quantity, 0);
         const inputId  = `adj-${id}-${ci}-${si}`;
         const hookDisp = cfg.hasHook && cfg.hookMap[size] ? cfg.hookMap[size].hookDisplay : null;
-        html += `<tr>
+        const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
+        const valCls = totalQty < 0 ? ' stock-negative-val' : '';
+        html += `<tr${rowCls}>
           <td>${size}</td>
           ${cfg.hasHook ? `<td>${hookDisp || '\u2014'}</td>` : ''}
-          <td class="num">${totalQty}</td>
+          <td class="num${valCls}">${totalQty}</td>
           <td><span class="restock-wrap">
             <input type="number" id="${inputId}" placeholder="\u00b1qty">
             <button class="btn btn-sm" onclick="adjustGenericQty('${id}','${color}','${size}','${inputId}')">Add</button>
@@ -2155,6 +2199,9 @@ function adjustGenericQty(pageId, color, size, inputId) {
   const qty = parseInt(el.value);
   if (isNaN(qty) || qty === 0) { alert('Enter a non-zero quantity (use negative to correct downward).'); return; }
   const data = load();
+  // Check if this would push stock negative
+  const currentStock = data.pours.filter(p => p.productType === cfg.productType && p.color === color && p.size === size).reduce((s, p) => s + p.quantity, 0);
+  if (currentStock + qty < 0 && !confirm(`This will bring stock to ${currentStock + qty}. Continue?`)) return;
   data.pours.unshift({
     id: Date.now().toString(36) + Math.random().toString(36).slice(2),
     date: new Date().toISOString(),
@@ -4201,7 +4248,7 @@ document.addEventListener('keydown', e => {
   if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
   if (e.altKey && e.key >= '1' && e.key <= '9') {
     e.preventDefault();
-    const tabs = ['swingheads','finesse','vkhead','weedguard','uppc','rigfinesse','righeavy','components','history','orders','alerts','data'];
+    const tabs = ['dashboard','swingheads','finesse','vkhead','weedguard','uppc','rigfinesse','righeavy','components','history','orders','alerts','data'];
     const idx  = parseInt(e.key) - 1;
     if (tabs[idx]) showPage(tabs[idx]);
   }
