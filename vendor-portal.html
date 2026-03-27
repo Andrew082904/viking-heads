@@ -57,7 +57,51 @@ header .shop-label strong{color:var(--text)}
 .sidebar{width:320px;background:var(--bg2);border-left:1px solid var(--border);padding:20px;display:flex;flex-direction:column;position:sticky;top:0;height:calc(100vh - 110px);overflow-y:auto}
 @media(max-width:900px){
   .main-wrap{flex-direction:column}
-  .sidebar{width:100%;height:auto;position:static;border-left:none;border-top:1px solid var(--border)}
+  .sidebar{display:none}
+}
+
+/* ── Floating mobile cart bar ── */
+.mobile-cart{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:2px solid var(--gold);padding:12px 16px;z-index:500;align-items:center;justify-content:space-between;gap:10px}
+.mobile-cart .cart-info{display:flex;gap:16px;font-size:.85rem}
+.mobile-cart .cart-info span{color:var(--text-dim)}
+.mobile-cart .cart-info strong{color:var(--gold)}
+.mobile-cart .btn-gold{padding:10px 20px;font-size:.85rem}
+@media(max-width:900px){
+  .mobile-cart{display:flex}
+  .catalog-area{padding:14px 10px;padding-bottom:80px}
+}
+
+/* ── Mobile: bigger tabs ── */
+@media(max-width:600px){
+  .tabs button{padding:14px 14px;font-size:.75rem;letter-spacing:.5px}
+  header{padding:10px 14px}
+  header .brand{font-size:1rem}
+  header span[style]{font-size:.65rem !important}
+}
+
+/* ── Mobile: card layout for catalog rows ── */
+@media(max-width:640px){
+  table.catalog thead{display:none}
+  table.catalog,table.catalog tbody,table.catalog tr,table.catalog td{display:block;width:100%}
+  table.catalog tr{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;align-items:center}
+  table.catalog tr:hover td{background:transparent}
+  table.catalog td{border:none;padding:2px 0;font-size:.85rem}
+  table.catalog td:nth-child(1)::before{content:'Size: ';color:var(--text-dim);font-size:.7rem}
+  table.catalog td:nth-child(2)::before{content:'Hook: ';color:var(--text-dim);font-size:.7rem}
+  table.catalog td:nth-child(3)::before{content:'Price: ';color:var(--text-dim);font-size:.7rem}
+  table.catalog td:nth-child(4){grid-column:1 / -1;justify-self:center;padding-top:6px}
+  table.catalog td:nth-child(5){grid-column:1 / -1;text-align:center;padding-top:2px}
+  .qty-btn{width:40px;height:42px;font-size:1.3rem}
+  .qty-wrap .qty-input{width:60px;height:42px;font-size:1.1rem}
+  .color-group h3{font-size:.85rem;padding:10px 12px}
+  .cat-section h2{font-size:1rem}
+  .login-box{padding:32px 24px}
+  .login-box h1{font-size:1.4rem}
+  .modal{margin:10px;max-height:90vh;border-radius:8px}
+  .modal-header{padding:14px 16px}
+  .modal-body{padding:14px 16px}
+  .modal-footer{padding:12px 16px;flex-direction:column}
+  .modal-footer button{width:100%}
 }
 
 /* ── Catalog Table ── */
@@ -172,6 +216,16 @@ input.qty-input[type=number]{-moz-appearance:textfield}
       <button class="btn-gold btn-review" onclick="openReview()">REVIEW ORDER</button>
     </div>
   </div>
+</div>
+
+<!-- ═══════════ MOBILE CART BAR ═══════════ -->
+<div class="mobile-cart" id="mobileCart">
+  <div class="cart-info">
+    <span><strong id="mobItems">0</strong> items</span>
+    <span><strong id="mobPacks">0</strong> packs</span>
+    <span><strong id="mobTotal">$0.00</strong></span>
+  </div>
+  <button class="btn-gold" onclick="openReview()">REVIEW</button>
 </div>
 
 <!-- ═══════════ REVIEW MODAL ═══════════ -->
@@ -501,6 +555,15 @@ function updateSummary() {
   document.getElementById('sumItems').textContent = totalItems;
   document.getElementById('sumUnits').textContent = totalUnits;
   document.getElementById('sumTotal').textContent = '$' + totalPrice.toFixed(2);
+
+  // Mobile cart bar
+  const mob = document.getElementById('mobileCart');
+  if (mob) {
+    document.getElementById('mobItems').textContent = totalItems;
+    document.getElementById('mobPacks').textContent = totalUnits;
+    document.getElementById('mobTotal').textContent = '$' + totalPrice.toFixed(2);
+    mob.style.display = totalItems > 0 ? 'flex' : '';
+  }
 
   const el = document.getElementById('sidebarItems');
   if (!items.length) {
