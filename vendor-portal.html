@@ -163,7 +163,7 @@ input.qty-input[type=number]{-moz-appearance:textfield}
       <h3>ORDER SUMMARY</h3>
       <div class="summary-stats">
         <div class="stat-box"><div class="val" id="sumItems">0</div><div class="label">ITEMS</div></div>
-        <div class="stat-box"><div class="val" id="sumUnits">0</div><div class="label">UNITS</div></div>
+        <div class="stat-box"><div class="val" id="sumUnits">0</div><div class="label">PACKS</div></div>
       </div>
       <div class="summary-stats" style="grid-template-columns:1fr">
         <div class="stat-box"><div class="val" id="sumTotal">$0.00</div><div class="label">ORDER TOTAL</div></div>
@@ -252,8 +252,7 @@ const SHOPS = [
    ────────────────────────────────────────────── */
 const CATALOG = [
   {
-    id: "swinghead", label: "Swingheads", title: "VK-Swinghead",
-    desc: "Premium swing-style jig heads with painted finish",
+    id: "swinghead", label: "Swingheads", title: "VK-Swinghead", packInfo: "2 heads per pack",
     colors: ["Bait Fish","Bing Bong","Commando","Gold Dust","Mint","Red"],
     sizes: [
       { size:"1/4oz", hook:"2/0", price:4.79 },
@@ -264,8 +263,7 @@ const CATALOG = [
     ]
   },
   {
-    id: "finesse", label: "Finesse", title: "VK-Finesse Head",
-    desc: "Lightweight finesse jig heads for subtle presentations",
+    id: "finesse", label: "Finesse", title: "VK-Finesse Head", packInfo: "3 heads per pack",
     colors: ["Bait Fish","Blue Bait Fish","Commando","Green Bait Fish","Purple Bait Fish"],
     sizes: [
       { size:"1/8oz", hook:"1/0", price:3.59 },
@@ -277,8 +275,7 @@ const CATALOG = [
     ]
   },
   {
-    id: "vkhead", label: "VK Head", title: "VK-Head",
-    desc: "Classic round jig head — the original Viking Heads design",
+    id: "vkhead", label: "VK Head", title: "VK-Head", packInfo: "2 heads per pack",
     colors: ["Commando","Bait Fish","Red","Yellow","Green Bait Fish","Purple Bait Fish","Blue Bait Fish","Uncle Bing Bong"],
     sizes: [
       { size:"1/4oz", hook:"3/0", price:3.49 },
@@ -289,8 +286,7 @@ const CATALOG = [
     ]
   },
   {
-    id: "weedguard", label: "Weedguard", title: "VK-Weedguard Head",
-    desc: "Jig heads with fiber weedguard for heavy cover fishing",
+    id: "weedguard", label: "Weedguard", title: "VK-Weedguard Head", packInfo: "2 heads per pack",
     colors: ["Commando","Bait Fish","Red","Yellow","Green Bait Fish","Purple Bait Fish","Blue Bait Fish","Uncle Bing Bong"],
     sizes: [
       { size:"1/4oz", hook:"3/0", price:3.98 },
@@ -302,8 +298,7 @@ const CATALOG = [
     priceOverrides: { "Uncle Bing Bong|1oz": 3.98 }
   },
   {
-    id: "pkc", label: "Uncle Philthy's", title: "Uncle Philthy's PKC",
-    desc: "4 heads per pack, no hooks — paint kit combo",
+    id: "pkc", label: "Uncle Philthy's", title: "Uncle Philthy's PKC", packInfo: "4 heads per pack, no hooks",
     colors: ["Mixed"],
     sizes: [
       { size:"1/4oz", hook:"—", price:4.79 },
@@ -314,16 +309,14 @@ const CATALOG = [
     ]
   },
   {
-    id: "rigfinesse", label: "Rig Finesse", title: "VK-Rig Finesse",
-    desc: "Pre-tied finesse rig — 5 arm configuration",
+    id: "rigfinesse", label: "Rig Finesse", title: "VK-Rig Finesse", packInfo: null,
     colors: ["Bait Fish","Blue Bait Fish","Green Bait Fish","Purple Bait Fish"],
     sizes: [
       { size:"5 ARM", hook:"—", price:18.00 }
     ]
   },
   {
-    id: "righeavy", label: "Rig Heavy", title: "VK-Rig Heavy",
-    desc: "Pre-tied heavy rig — 5 arm configuration",
+    id: "righeavy", label: "Rig Heavy", title: "VK-Rig Heavy", packInfo: null,
     colors: ["Bait Fish","Blue Bait Fish","Green Bait Fish","Purple Bait Fish"],
     sizes: [
       { size:"5 ARM", hook:"—", price:16.75 }
@@ -417,12 +410,12 @@ function buildCatalog() {
     sec.className = 'cat-section';
     sec.id = 'sec-' + cat.id;
 
-    let html = `<h2>${cat.title}</h2>`;
+    let html = `<h2>${cat.title}</h2>${cat.packInfo ? `<div style="color:var(--text-dim);font-size:.8rem;margin-bottom:12px">${cat.packInfo}</div>` : ''}`;
 
     cat.colors.forEach(color => {
       html += `<div class="color-group"><h3>${color}</h3>`;
       html += `<table class="catalog"><thead><tr>
-        <th>SIZE</th><th>HOOK</th><th>PRICE</th><th style="text-align:center">QTY</th><th style="text-align:right">TOTAL</th>
+        <th>SIZE</th><th>HOOK</th><th>PRICE</th><th style="text-align:center">PACKS</th><th style="text-align:right">TOTAL</th>
       </tr></thead><tbody>`;
 
       cat.sizes.forEach(sz => {
@@ -542,14 +535,14 @@ function openReview() {
 
   for (const [cat, list] of Object.entries(grouped)) {
     html += `<div class="review-group"><h4>${escHtml(cat)}</h4>`;
-    html += `<table class="review-table"><thead><tr><th>Color</th><th>Size</th><th>Hook</th><th>Qty</th><th style="text-align:right">Total</th></tr></thead><tbody>`;
+    html += `<table class="review-table"><thead><tr><th>Color</th><th>Size</th><th>Hook</th><th>Packs</th><th style="text-align:right">Total</th></tr></thead><tbody>`;
     list.forEach(i => {
       html += `<tr><td>${escHtml(i.color)}</td><td>${i.size}</td><td>${i.hook}</td><td>${i.qty}</td><td class="price" style="text-align:right">$${i.total.toFixed(2)}</td></tr>`;
     });
     html += `</tbody></table></div>`;
   }
 
-  html += `<div class="review-total">${totalUnits} units &mdash; $${totalPrice.toFixed(2)}</div>`;
+  html += `<div class="review-total">${totalUnits} packs &mdash; $${totalPrice.toFixed(2)}</div>`;
 
   document.getElementById('reviewBody').innerHTML = html;
   document.getElementById('reviewModal').classList.add('show');
