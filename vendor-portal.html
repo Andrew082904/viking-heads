@@ -192,6 +192,57 @@ input.qty-input[type=number]{-moz-appearance:textfield}
 .confirm-box .order-num{font-size:1.3rem;color:var(--text);margin:16px 0;padding:12px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border)}
 .confirm-box p{color:var(--text-dim);font-size:.85rem;margin-bottom:20px}
 
+/* ── Order History Tab ── */
+.order-history-section{display:none;animation:fadeIn .25s ease}
+.order-history-section.active{display:block}
+.oh-empty{text-align:center;color:var(--text-dim);padding:48px 20px;font-size:.9rem}
+.oh-loading{text-align:center;color:var(--text-dim);padding:48px 20px;font-size:.9rem}
+.oh-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;transition:border-color .2s}
+.oh-card:hover{border-color:rgba(201,162,39,.3)}
+.oh-card-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;gap:12px;flex-wrap:wrap}
+.oh-card-header:hover{background:rgba(255,255,255,.02)}
+.oh-order-num{color:var(--text);font-weight:bold;font-size:.9rem;letter-spacing:.5px}
+.oh-date{color:var(--text-dim);font-size:.8rem}
+.oh-meta{display:flex;gap:16px;align-items:center;font-size:.8rem}
+.oh-meta span{color:var(--text-dim)}
+.oh-meta strong{color:var(--gold)}
+.oh-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.7rem;font-weight:bold;letter-spacing:1px;text-transform:uppercase}
+.oh-badge.pending{background:rgba(201,162,39,.15);color:#e0b830;border:1px solid rgba(201,162,39,.3)}
+.oh-badge.poured{background:rgba(52,152,219,.15);color:#5dade2;border:1px solid rgba(52,152,219,.3)}
+.oh-badge.shipped{background:rgba(46,204,113,.15);color:#2ecc71;border:1px solid rgba(46,204,113,.3)}
+.oh-expand{color:var(--text-dim);font-size:.8rem;transition:transform .2s}
+.oh-card.open .oh-expand{transform:rotate(180deg)}
+.oh-card-body{display:none;padding:0 16px 14px;border-top:1px solid var(--border)}
+.oh-card.open .oh-card-body{display:block}
+.oh-card-body table{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:10px}
+.oh-card-body th{text-align:left;color:var(--text-dim);padding:6px 8px;border-bottom:1px solid var(--border);font-size:.7rem;letter-spacing:1px}
+.oh-card-body td{padding:6px 8px;border-bottom:1px solid rgba(26,48,80,.3)}
+.oh-card-body .price{color:var(--gold)}
+.oh-notes{color:var(--text-dim);font-size:.8rem;margin-top:10px;padding:8px 10px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border);font-style:italic}
+@media(max-width:640px){
+  .oh-card-header{padding:10px 12px}
+  .oh-meta{gap:10px;font-size:.75rem}
+  .oh-card-body table thead{display:none}
+  .oh-card-body table,.oh-card-body table tbody,.oh-card-body table tr,.oh-card-body table td{display:block;width:100%}
+  .oh-card-body table tr{padding:6px 0;border-bottom:1px solid rgba(26,48,80,.3)}
+  .oh-card-body table td{border:none;padding:2px 0;font-size:.78rem}
+  .oh-card-body table td::before{content:attr(data-label) ": ";color:var(--text-dim);font-size:.7rem}
+}
+
+/* ── Order Notes Textarea ── */
+.order-notes-wrap{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+.order-notes-wrap label{display:block;color:var(--text-dim);font-size:.75rem;letter-spacing:1px;margin-bottom:6px}
+.order-notes-wrap textarea{width:100%;min-height:72px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:.85rem;resize:vertical;line-height:1.5}
+.order-notes-wrap textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 2px rgba(201,162,39,.2)}
+.order-notes-wrap textarea::placeholder{color:var(--text-dim);opacity:.7}
+
+/* ── Copy Summary Button ── */
+.btn-copy{background:var(--bg3);color:var(--gold);border:1px solid var(--gold);border-radius:var(--radius);padding:10px 20px;cursor:pointer;font-size:.85rem;letter-spacing:1px;transition:all .2s;margin-top:12px}
+.btn-copy:hover{background:var(--gold);color:#000}
+.btn-copy:active{transform:scale(.97)}
+.btn-copy:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.confirm-summary{text-align:left;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin:16px 0;font-size:.8rem;max-height:300px;overflow-y:auto;white-space:pre-wrap;color:var(--text);line-height:1.6}
+
 /* ── Animations ── */
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes scaleIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
@@ -219,9 +270,9 @@ input.qty-input[type=number]{-moz-appearance:textfield}
 <!-- ═══════════ APP SHELL ═══════════ -->
 <div id="appShell">
   <header>
-    <div>
+    <div style="display:flex;align-items:center">
       <span class="brand"><img src="viking-heads-logo.jpg" alt="Viking Heads"></span>
-      <span style="color:var(--text-dim);font-size:.8rem;margin-left:8px;letter-spacing:2px">VENDOR PORTAL</span>
+      <span style="color:var(--text-dim);font-size:.8rem;margin-left:8px;letter-spacing:2px;line-height:1">VENDOR PORTAL</span>
     </div>
     <div style="display:flex;align-items:center;gap:16px">
       <span class="shop-label">Shop: <strong id="headerShop"></strong></span>
@@ -270,6 +321,7 @@ input.qty-input[type=number]{-moz-appearance:textfield}
       <button class="btn-sm" onclick="closeReview()">BACK TO EDITING</button>
       <button class="btn-gold" onclick="submitOrder()" id="submitBtn">SUBMIT ORDER</button>
     </div>
+    <!-- Notes area injected into reviewBody via JS -->
   </div>
 </div>
 
@@ -280,7 +332,11 @@ input.qty-input[type=number]{-moz-appearance:textfield}
     <h2>ORDER SUBMITTED</h2>
     <div class="order-num" id="confirmOrderNum"></div>
     <p>Your order has been received and is pending review. You will be contacted when it ships.</p>
-    <button class="btn-gold" onclick="startNewOrder()">PLACE ANOTHER ORDER</button>
+    <div class="confirm-summary" id="confirmSummaryText"></div>
+    <button class="btn-copy" onclick="copyOrderSummary()">COPY ORDER SUMMARY</button>
+    <div style="margin-top:16px">
+      <button class="btn-gold" onclick="startNewOrder()">PLACE ANOTHER ORDER</button>
+    </div>
   </div>
 </div>
 
@@ -502,6 +558,19 @@ function buildCatalog() {
 
     renderCatalogSection(cat);
   });
+
+  // Order History tab
+  const ohBtn = document.createElement('button');
+  ohBtn.textContent = 'ORDER HISTORY';
+  ohBtn.dataset.tab = 'orderhistory';
+  ohBtn.onclick = () => switchTab('orderhistory');
+  tabBar.appendChild(ohBtn);
+
+  const ohSec = document.createElement('div');
+  ohSec.className = 'order-history-section';
+  ohSec.id = 'sec-orderhistory';
+  ohSec.innerHTML = '<div class="oh-loading">Loading order history...</div>';
+  area.appendChild(ohSec);
 }
 
 function getQtyValues(sectionEl) {
@@ -623,6 +692,11 @@ function buildRowBySize(cat, color, sz) {
 function switchTab(id) {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   document.querySelectorAll('.cat-section').forEach(s => s.classList.toggle('active', s.id === 'sec-' + id));
+  const ohSec = document.getElementById('sec-orderhistory');
+  if (ohSec) {
+    ohSec.classList.toggle('active', id === 'orderhistory');
+    if (id === 'orderhistory') loadOrderHistory();
+  }
 }
 
 /* ──────────────────────────────────────────────
@@ -721,6 +795,9 @@ function openReview() {
 
   html += `<div class="review-total">${totalUnits} packs &mdash; $${totalPrice.toFixed(2)}</div>`;
 
+  html += `<div class="order-notes-wrap"><label>ORDER NOTES</label>
+    <textarea id="orderNotes" placeholder="Special requests or notes (optional)"></textarea></div>`;
+
   document.getElementById('reviewBody').innerHTML = html;
   document.getElementById('reviewModal').classList.add('show');
 }
@@ -745,6 +822,9 @@ async function submitOrder() {
 
   const orderNum = 'VKV-' + Date.now().toString(36).toUpperCase();
 
+  const notesEl = document.getElementById('orderNotes');
+  const notes = notesEl ? notesEl.value.trim() : '';
+
   const order = {
     orderNumber: orderNum,
     shop: currentShop,
@@ -755,12 +835,25 @@ async function submitOrder() {
     submittedAt: new Date().toISOString(),
     timestamp: firebase.database.ServerValue.TIMESTAMP
   };
+  if (notes) order.notes = notes;
 
   try {
     await db.ref('vendorOrders').push(order);
+
+    // Save to localStorage for order history (Firebase read rules may block queries)
+    const lsKey = 'vk_orders_' + currentShop;
+    const saved = JSON.parse(localStorage.getItem(lsKey) || '[]');
+    saved.unshift({ ...order, timestamp: Date.now() });
+    localStorage.setItem(lsKey, JSON.stringify(saved));
+
     closeReview();
     document.getElementById('appShell').style.display = 'none';
     document.getElementById('confirmOrderNum').textContent = orderNum;
+
+    // Build summary text for confirmation screen and clipboard
+    lastOrderSummary = buildOrderSummaryText(orderNum, currentShop, items, totalUnits, totalPrice, notes);
+    document.getElementById('confirmSummaryText').textContent = lastOrderSummary;
+
     document.getElementById('confirmScreen').className = 'show';
   } catch (err) {
     alert('Error submitting order: ' + err.message);
@@ -777,6 +870,159 @@ function startNewOrder() {
   document.getElementById('confirmScreen').className = '';
   document.getElementById('appShell').style.display = 'block';
   switchTab(CATALOG[0].id);
+}
+
+/* ──────────────────────────────────────────────
+   ORDER SUMMARY & CLIPBOARD
+   ────────────────────────────────────────────── */
+let lastOrderSummary = '';
+
+function buildOrderSummaryText(orderNum, shop, items, totalUnits, totalPrice, notes) {
+  let txt = `ORDER CONFIRMATION\n`;
+  txt += `==================\n`;
+  txt += `Order: ${orderNum}\n`;
+  txt += `Shop: ${shop}\n`;
+  txt += `Date: ${new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })}\n\n`;
+  txt += `ITEMS:\n`;
+
+  const grouped = {};
+  items.forEach(i => {
+    if (!grouped[i.category]) grouped[i.category] = [];
+    grouped[i.category].push(i);
+  });
+
+  for (const [cat, list] of Object.entries(grouped)) {
+    txt += `\n  ${cat}\n`;
+    list.forEach(i => {
+      const hookStr = i.hook !== '—' ? ` | Hook ${i.hook}` : '';
+      txt += `    ${i.color} | ${i.size}${hookStr} | ${i.qty} packs | $${i.total.toFixed(2)}\n`;
+    });
+  }
+
+  txt += `\n------------------\n`;
+  txt += `Total: ${totalUnits} packs — $${totalPrice.toFixed(2)}\n`;
+
+  if (notes) {
+    txt += `\nNotes: ${notes}\n`;
+  }
+
+  return txt;
+}
+
+function copyOrderSummary() {
+  if (!lastOrderSummary) return;
+  navigator.clipboard.writeText(lastOrderSummary).then(() => {
+    const btn = document.querySelector('.btn-copy');
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'COPIED!';
+      btn.style.borderColor = 'var(--green)';
+      btn.style.color = 'var(--green)';
+      setTimeout(() => { btn.textContent = orig; btn.style.borderColor = ''; btn.style.color = ''; }, 2000);
+    }
+  }).catch(() => {
+    // Fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = lastOrderSummary;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    const btn = document.querySelector('.btn-copy');
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'COPIED!';
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }
+  });
+}
+
+/* ──────────────────────────────────────────────
+   ORDER HISTORY
+   ────────────────────────────────────────────── */
+function loadOrderHistory() {
+  const sec = document.getElementById('sec-orderhistory');
+  if (!sec || !currentShop) return;
+
+  sec.innerHTML = '<div class="oh-loading">Loading order history...</div>';
+
+  // Try Firebase first, fall back to localStorage
+  db.ref('vendorOrders').orderByChild('shop').equalTo(currentShop).once('value')
+    .then(snapshot => {
+      const orders = [];
+      snapshot.forEach(child => {
+        orders.push({ key: child.key, ...child.val() });
+      });
+      renderOrderHistory(sec, orders);
+    })
+    .catch(() => {
+      // Firebase read blocked — use localStorage
+      const lsKey = 'vk_orders_' + currentShop;
+      const orders = JSON.parse(localStorage.getItem(lsKey) || '[]')
+        .map((o, i) => ({ key: 'ls-' + i, ...o }));
+      renderOrderHistory(sec, orders);
+    });
+}
+
+function renderOrderHistory(sec, orders) {
+  orders.sort((a, b) => {
+    const ta = a.timestamp || new Date(a.submittedAt).getTime() || 0;
+    const tb = b.timestamp || new Date(b.submittedAt).getTime() || 0;
+    return tb - ta;
+  });
+
+  if (!orders.length) {
+    sec.innerHTML = '<div class="oh-empty">No orders yet. Place your first order from the product tabs above.</div>';
+    return;
+  }
+
+  let html = `<h2 style="color:var(--gold);font-size:1.1rem;margin-bottom:16px;letter-spacing:1px">ORDER HISTORY</h2>`;
+
+  orders.forEach(order => {
+    const date = order.submittedAt ? new Date(order.submittedAt).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }) : '—';
+    const status = (order.status || 'pending').toLowerCase();
+    const badgeClass = status === 'shipped' ? 'shipped' : status === 'poured' ? 'poured' : 'pending';
+    const itemCount = order.items ? order.items.length : 0;
+    const total = order.totalPrice ? '$' + order.totalPrice.toFixed(2) : '—';
+
+    html += `<div class="oh-card" id="oh-${order.key}">`;
+    html += `<div class="oh-card-header" onclick="toggleOrderCard('${order.key}')">`;
+    html += `<div><span class="oh-order-num">${escHtml(order.orderNumber || '—')}</span> <span class="oh-date">${date}</span></div>`;
+    html += `<div class="oh-meta">`;
+    html += `<span>${itemCount} items, <strong>${order.totalUnits || 0}</strong> packs</span>`;
+    html += `<strong>${total}</strong>`;
+    html += `<span class="oh-badge ${badgeClass}">${status}</span>`;
+    html += `<span class="oh-expand">&#9660;</span>`;
+    html += `</div></div>`;
+
+    html += `<div class="oh-card-body">`;
+    if (order.items && order.items.length) {
+      html += `<table><thead><tr><th>Color</th><th>Size</th><th>Hook</th><th>Packs</th><th style="text-align:right">Total</th></tr></thead><tbody>`;
+      order.items.forEach(i => {
+        html += `<tr>`;
+        html += `<td data-label="Color">${escHtml(i.color || '')}</td>`;
+        html += `<td data-label="Size">${i.size || ''}</td>`;
+        html += `<td data-label="Hook">${i.hook || ''}</td>`;
+        html += `<td data-label="Packs">${i.qty || 0}</td>`;
+        html += `<td data-label="Total" class="price" style="text-align:right">$${(i.total || 0).toFixed(2)}</td>`;
+        html += `</tr>`;
+      });
+      html += `</tbody></table>`;
+    }
+    if (order.notes) {
+      html += `<div class="oh-notes">Notes: ${escHtml(order.notes)}</div>`;
+    }
+    html += `</div></div>`;
+  });
+
+  sec.innerHTML = html;
+}
+
+function toggleOrderCard(key) {
+  const card = document.getElementById('oh-' + key);
+  if (card) card.classList.toggle('open');
 }
 
 /* ──────────────────────────────────────────────
