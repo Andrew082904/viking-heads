@@ -461,6 +461,42 @@
   .hist-filter-bar label { font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#5a7a9a; }
   .hist-filter-bar select,
   .hist-filter-bar input  { font-size:12px;padding:4px 7px; }
+
+  /* ── Vendor Portal Orders Inbox ── */
+  .vendor-inbox { margin-bottom:28px; }
+  .vendor-inbox-title {
+    color:#c9a227;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;
+    margin-bottom:10px;display:flex;align-items:center;gap:10px;
+  }
+  .vendor-inbox-title .vi-count {
+    background:#c9a227;color:#0d1b2a;border-radius:9px;font-size:10px;font-weight:bold;
+    padding:1px 7px;letter-spacing:0;
+  }
+  .vendor-card {
+    padding:12px 16px;background:#0e1f30;border:1px solid #1a3050;border-radius:4px;
+    margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .vendor-card.vc-pending  { border-left:3px solid #c9a227; }
+  .vendor-card.vc-accepted { border-left:3px solid #3a8acf; }
+  .vendor-card.vc-shipped  { border-left:3px solid #4caf7d; }
+  .vendor-card .vc-shop { color:#c9a227;font-weight:bold;font-size:13px;letter-spacing:2px; }
+  .vendor-card .vc-meta { color:#5a7a9a;font-size:11px; }
+  .vendor-card .vc-status {
+    font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;
+    border-radius:3px;white-space:nowrap;
+  }
+  .vc-status-pending  { background:#3a2a00;border:1px solid #c9a227;color:#f5d070; }
+  .vc-status-accepted { background:#0a1a30;border:1px solid #3a8acf;color:#7ab8f0; }
+  .vc-status-shipped  { background:#0a2016;border:1px solid #2a7a4a;color:#5ad090; }
+  .vendor-card .vc-price { color:#c9d8e8;font-size:14px;font-weight:bold; }
+  .vendor-card .vc-items-preview {
+    width:100%;margin-top:6px;font-size:11px;color:#6a8aaa;line-height:1.6;
+  }
+  .vendor-badge {
+    background:#c9a227;color:#0d1b2a;border-radius:9px;font-size:10px;font-weight:bold;
+    padding:1px 6px;margin-left:5px;vertical-align:middle;display:none;
+  }
+  .vendor-badge.visible { display:inline-block; }
   </style>
 </head>
 <body>
@@ -503,7 +539,7 @@
   <button id="tab-components"  onclick="showPage('components')">Components</button>
   <button id="tab-history"    onclick="showPage('history')">Pour History</button>
   <button id="tab-data"       onclick="showPage('data')">Data</button>
-  <button id="tab-orders"     onclick="showPage('orders')">Orders</button>
+  <button id="tab-orders"     onclick="showPage('orders')">Orders<span id="vendor-badge" class="vendor-badge"></span></button>
   <button id="tab-alerts"     onclick="showPage('alerts')">Alerts<span id="alert-badge" class="alert-badge"></span></button>
 </nav>
 
@@ -698,6 +734,10 @@
 let _dataCache    = null;  // in-memory data cache — load() reads from here
 let _db           = null;  // Firebase database reference (null = not connected)
 let _pendingSaves = 0;     // in-flight Firebase writes (skip self-triggered refreshes)
+
+let _vendorOrdersCache = null;  // cached vendor portal orders { key: orderData }
+let _vendorOrdersLoading = false;
+let _vendorOrdersError = null;
 
 // ============================================================
 // CONSTANTS — hardcoded, no settings page
@@ -2975,7 +3015,286 @@ function setOrderSearch(val) {
   renderOrders();
 }
 
+// ============================================================
+// VENDOR PORTAL ORDERS
+// ============================================================
+
+const VENDOR_CAT_MAP = {
+  'VK-Swinghead':          'Swinghead',
+  'VK-Finesse Head':       'Finesse Head',
+  'VK-Head':               'VK Head',
+  'VK-Weedguard Head':     'Weedguard Head',
+  "Uncle Philthy's PKC":   "Uncle Philthy's",
+  'VK-Rig Finesse':        'VK-Rig Finesse',
+  'VK-Rig Heavy':          'VK-Rig Heavy',
+};
+
+function normalizeVendorSize(sizeStr) {
+  if (!sizeStr) return sizeStr;
+  // "1/4oz" → "1/4 oz", "3/16oz" → "3/16 oz", but leave "5 ARM" alone
+  return sizeStr.replace(/(\d)oz$/i, '$1 oz');
+}
+
+function findSkuForVendorItem(vendorItem) {
+  const productType = VENDOR_CAT_MAP[vendorItem.cat] || vendorItem.cat;
+  const size = normalizeVendorSize(vendorItem.size);
+  const color = vendorItem.color;
+  const hookSize = vendorItem.hook || null;
+
+  for (const [sku, def] of Object.entries(SKU_TABLE)) {
+    if (def.productType !== productType) continue;
+    if (def.size !== size) continue;
+    if (def.color !== color) continue;
+    // For products with hooks, match hookSize
+    if (def.hookSize && hookSize && def.hookSize !== hookSize) continue;
+    // For hookless products (Swinghead, Uncle Philthy's, Rigs), hookSize is null in both
+    if (!def.hookSize && hookSize) continue;
+    return { sku, def };
+  }
+  return null;
+}
+
+function fetchVendorOrders(forceRefresh) {
+  if (!_db) {
+    _vendorOrdersError = 'Firebase not connected';
+    _vendorOrdersCache = {};
+    updateVendorBadge();
+    return Promise.resolve();
+  }
+  if (_vendorOrdersCache && !forceRefresh) {
+    updateVendorBadge();
+    return Promise.resolve();
+  }
+  if (_vendorOrdersLoading) return Promise.resolve();
+
+  _vendorOrdersLoading = true;
+  _vendorOrdersError = null;
+
+  return _db.ref('vendorOrders').once('value').then(snap => {
+    _vendorOrdersCache = snap.val() || {};
+    _vendorOrdersLoading = false;
+    updateVendorBadge();
+  }).catch(err => {
+    console.warn('Failed to load vendor orders:', err);
+    _vendorOrdersError = 'Unable to load vendor orders';
+    _vendorOrdersCache = {};
+    _vendorOrdersLoading = false;
+    updateVendorBadge();
+  });
+}
+
+function updateVendorBadge() {
+  const badge = document.getElementById('vendor-badge');
+  if (!badge) return;
+  if (!_vendorOrdersCache) { badge.classList.remove('visible'); return; }
+  const pendingCount = Object.values(_vendorOrdersCache).filter(o => o.status === 'pending').length;
+  if (pendingCount > 0) {
+    badge.textContent = pendingCount;
+    badge.classList.add('visible');
+  } else {
+    badge.classList.remove('visible');
+  }
+}
+
+function renderVendorInbox() {
+  if (_vendorOrdersError) {
+    return `<div class="vendor-inbox"><div style="padding:10px 14px;color:#5a7a9a;font-style:italic;background:#0a1520;border:1px solid #1a2a3a;border-radius:4px;margin-bottom:20px">${_vendorOrdersError}</div></div>`;
+  }
+  if (!_vendorOrdersCache || !Object.keys(_vendorOrdersCache).length) return '';
+
+  // Show non-declined orders, sorted newest first
+  const entries = Object.entries(_vendorOrdersCache)
+    .filter(([, o]) => o.status !== 'declined')
+    .sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+
+  if (!entries.length) return '';
+
+  const pendingCount = entries.filter(([, o]) => o.status === 'pending').length;
+
+  let html = `<div class="vendor-inbox">
+    <div class="vendor-inbox-title">
+      Vendor Portal Orders
+      ${pendingCount > 0 ? `<span class="vi-count">${pendingCount} NEW</span>` : ''}
+    </div>`;
+
+  entries.forEach(([key, order]) => {
+    const status = order.status || 'pending';
+    const statusClass = `vc-${status}`;
+    const statusLabelClass = `vc-status-${status}`;
+    const date = order.submittedAt ? new Date(order.submittedAt).toLocaleDateString() : '—';
+    const itemCount = (order.items || []).length;
+    const totalUnits = order.totalUnits || (order.items || []).reduce((s, i) => s + (i.qty || 0), 0);
+    const totalPrice = order.totalPrice != null ? `$${Number(order.totalPrice).toFixed(2)}` : '';
+
+    // Items preview (first 3 items)
+    const previewItems = (order.items || []).slice(0, 3).map(i =>
+      `${i.qty}x ${i.color} ${i.size}${i.hook ? ' ' + i.hook : ''}`
+    ).join(' &middot; ');
+    const moreCount = (order.items || []).length - 3;
+    const moreStr = moreCount > 0 ? ` <span style="color:#3a5a7a">+${moreCount} more</span>` : '';
+
+    const acceptBtn = status === 'pending'
+      ? `<button class="btn btn-gold btn-sm" onclick="acceptVendorOrder('${key}')">ACCEPT ORDER</button>
+         <button class="btn btn-danger btn-sm" onclick="declineVendorOrder('${key}')">DECLINE</button>`
+      : '';
+    const viewBtn = `<button class="btn btn-sm" onclick="toggleVendorDetails('${key}')">Details</button>`;
+
+    // Build detail table for expandable section
+    let detailRows = '';
+    (order.items || []).forEach(i => {
+      const match = findSkuForVendorItem(i);
+      const skuLabel = match ? match.sku : `<span style="color:#e87070">NO MATCH</span>`;
+      detailRows += `<tr>
+        <td class="muted" style="font-size:11px">${skuLabel}</td>
+        <td>${i.cat || ''}</td>
+        <td>${i.color || ''}</td>
+        <td>${i.size || ''}</td>
+        <td>${i.hook || '—'}</td>
+        <td class="num">${i.qty || 0}</td>
+        <td class="muted">$${(i.total || 0).toFixed(2)}</td>
+      </tr>`;
+    });
+
+    html += `<div class="vendor-card ${statusClass}">
+      <span class="vc-shop">${(order.shop || 'Unknown').toUpperCase()}</span>
+      <span class="vc-meta">#${order.orderNumber || key.slice(-6)}</span>
+      <span class="vc-meta">${date}</span>
+      <span class="vc-status ${statusLabelClass}">${status.toUpperCase()}</span>
+      <span class="vc-meta">${itemCount} items &middot; ${totalUnits} units</span>
+      ${totalPrice ? `<span class="vc-price">${totalPrice}</span>` : ''}
+      <span style="flex:1"></span>
+      ${viewBtn}
+      ${acceptBtn}
+      <div class="vc-items-preview">${previewItems}${moreStr}</div>
+      <div id="vendor-detail-${key}" style="display:none;width:100%;margin-top:8px">
+        ${order.notes ? `<div style="margin-bottom:8px;padding:6px 10px;background:#091a28;border-left:3px solid #c9a227;font-size:11px;color:#c9d8e8">${order.notes}</div>` : ''}
+        <div class="table-wrap"><table>
+          <thead><tr><th>SKU Match</th><th>Category</th><th>Color</th><th>Size</th><th>Hook</th><th>Qty</th><th>Price</th></tr></thead>
+          <tbody>${detailRows}</tbody>
+        </table></div>
+      </div>
+    </div>`;
+  });
+
+  html += '</div>';
+  return html;
+}
+
+function toggleVendorDetails(key) {
+  const el = document.getElementById('vendor-detail-' + key);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function acceptVendorOrder(key) {
+  const order = _vendorOrdersCache[key];
+  if (!order) { showToast('Vendor order not found', 'error'); return; }
+
+  // Convert vendor items to main app format
+  const items = [];
+  const unmapped = [];
+
+  (order.items || []).forEach(vi => {
+    const match = findSkuForVendorItem(vi);
+    if (!match) {
+      unmapped.push(`${vi.color} ${vi.size}${vi.hook ? ' ' + vi.hook : ''} (${vi.cat})`);
+      return;
+    }
+    const qty = vi.qty || 0;
+    if (qty < 1) return;
+    const components = calcDeductionsForSku(match.def, qty);
+    items.push({
+      sku: match.sku,
+      productType: match.def.productType,
+      size: match.def.size,
+      color: match.def.color,
+      hookSize: match.def.hookSize,
+      hookKey: match.def.hookKey,
+      quantity: qty,
+      components,
+      itemStatus: { poured: false, loaded: false, painted: false }
+    });
+  });
+
+  if (unmapped.length) {
+    if (!confirm(`${unmapped.length} item(s) could not be matched to SKUs and will be skipped:\n\n${unmapped.join('\n')}\n\nContinue importing the ${items.length} matched items?`)) return;
+  }
+  if (!items.length) {
+    showToast('No items could be mapped to known SKUs', 'error');
+    return;
+  }
+
+  const data = load();
+  const newOrder = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+    shop: order.shop || 'Vendor Order',
+    dueDate: '',
+    notes: `Vendor portal order #${order.orderNumber || key.slice(-6)}${order.notes ? ' — ' + order.notes : ''}`,
+    createdAt: new Date().toISOString(),
+    status: 'pending',
+    archived: false,
+    items,
+    vendorOrderKey: key,
+  };
+  data.orders.unshift(newOrder);
+  save(data);
+
+  // Update vendor order status in Firebase
+  if (_db) {
+    _db.ref('vendorOrders/' + key + '/status').set('accepted').catch(err => {
+      console.warn('Failed to update vendor order status:', err);
+    });
+  }
+  _vendorOrdersCache[key].status = 'accepted';
+  updateVendorBadge();
+
+  showToast(`Accepted order from ${order.shop} — ${items.length} items imported`);
+  renderOrders();
+}
+
+function declineVendorOrder(key) {
+  const order = _vendorOrdersCache[key];
+  if (!order) return;
+  if (!confirm(`Decline order #${order.orderNumber || key.slice(-6)} from ${order.shop}?`)) return;
+
+  if (_db) {
+    _db.ref('vendorOrders/' + key + '/status').set('declined').catch(err => {
+      console.warn('Failed to update vendor order status:', err);
+    });
+  }
+  _vendorOrdersCache[key].status = 'declined';
+  updateVendorBadge();
+
+  showToast(`Declined order from ${order.shop}`);
+  renderOrders();
+}
+
+function syncVendorOrderStatus(orderId, newStatus) {
+  const data = load();
+  const order = data.orders.find(o => o.id === orderId);
+  if (!order || !order.vendorOrderKey) return;
+  if (!_db) return;
+
+  // Map main app statuses to vendor-visible statuses
+  const vendorStatus = (newStatus === 'shipped') ? 'shipped'
+    : (newStatus === 'poured' || newStatus === 'partial') ? 'accepted'
+    : 'accepted';
+
+  _db.ref('vendorOrders/' + order.vendorOrderKey + '/status').set(vendorStatus).catch(err => {
+    console.warn('Failed to sync vendor order status:', err);
+  });
+  if (_vendorOrdersCache && _vendorOrdersCache[order.vendorOrderKey]) {
+    _vendorOrdersCache[order.vendorOrderKey].status = vendorStatus;
+  }
+}
+
 function renderOrders() {
+  // Fetch vendor orders on first render (async, re-renders when ready)
+  if (!_vendorOrdersCache && !_vendorOrdersLoading) {
+    fetchVendorOrders(false).then(() => {
+      if (_vendorOrdersCache && Object.keys(_vendorOrdersCache).length) renderOrders();
+    });
+  }
+
   const data   = load();
   const wrap   = document.getElementById('orders-list');
 
@@ -3023,7 +3342,10 @@ function renderOrders() {
     !q || o.shop.toLowerCase().includes(q)
   );
 
-  let html = searchBar + sortBar;
+  // Vendor portal inbox (rendered at top)
+  const vendorInbox = renderVendorInbox();
+
+  let html = vendorInbox + searchBar + sortBar;
 
   const totalActive = data.orders.filter(o => !o.archived).length;
   if (!totalActive) {
@@ -3339,6 +3661,7 @@ function markOrderPoured(orderId) {
     item.itemStatus.poured = true;
   });
   save(data);
+  syncVendorOrderStatus(orderId, 'poured');
   renderOrders();
 }
 
@@ -3484,6 +3807,7 @@ function confirmShipOrder(orderId) {
   }
 
   save(data);
+  syncVendorOrderStatus(orderId, order.status);
   showToast(`Shipped ${totalShipping} heads for ${order.shop}`);
   renderOrders();
 }
@@ -4315,11 +4639,20 @@ async function initApp() {
             _dataCache = applyMigrations(snap.val());
             render(activePage);
           }
+          // Refresh vendor orders too
+          fetchVendorOrders(true).then(() => {
+            if (activePage === 'orders') renderOrders();
+          });
         } catch(e) { /* ignore sync errors */ }
       }
     });
 
     updateFirebaseStatus(true);
+
+    // Fetch vendor portal orders in background (for Orders tab badge)
+    fetchVendorOrders(true).then(() => {
+      if (activePage === 'orders') renderOrders();
+    });
   } catch(e) {
     console.warn('Firebase init failed:', e);
     updateFirebaseStatus(false, e.message);
