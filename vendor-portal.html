@@ -129,6 +129,13 @@ table.catalog tbody tr:nth-child(even) td{background:rgba(255,255,255,.015)}
 @media(hover:hover){table.catalog tr:hover td{background:rgba(201,162,39,.07)}}
 table.catalog .price{color:var(--gold);font-weight:bold}
 table.catalog .line-total{color:var(--green);font-weight:bold;min-width:60px}
+.view-toggle{display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:.8rem;color:var(--text-dim)}
+.view-toggle span{letter-spacing:1px}
+.view-toggle button{background:var(--bg);border:1px solid var(--border);color:var(--text-dim);padding:6px 14px;cursor:pointer;font-size:.8rem;letter-spacing:.5px;transition:all .2s}
+.view-toggle button:first-of-type{border-radius:var(--radius) 0 0 var(--radius);border-right:none}
+.view-toggle button:last-of-type{border-radius:0 var(--radius) var(--radius) 0}
+.view-toggle button.active{background:var(--gold);color:#000;border-color:var(--gold);font-weight:bold}
+.view-toggle button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 input.qty-input{width:64px;padding:8px 6px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:.95rem;font-weight:bold}
 input.qty-input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 2px rgba(201,162,39,.2)}
 input.qty-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
@@ -467,6 +474,9 @@ function showApp() {
    ────────────────────────────────────────────── */
 let built = false;
 
+// Track view mode per category
+const viewModes = {};
+
 function buildCatalog() {
   if (built) return;
   built = true;
@@ -475,6 +485,8 @@ function buildCatalog() {
   const area = document.getElementById('catalogArea');
 
   CATALOG.forEach(cat => {
+    viewModes[cat.id] = 'color';
+
     // Tab button
     const btn = document.createElement('button');
     btn.textContent = cat.label;
@@ -486,47 +498,126 @@ function buildCatalog() {
     const sec = document.createElement('div');
     sec.className = 'cat-section';
     sec.id = 'sec-' + cat.id;
+    area.appendChild(sec);
 
-    let html = `<h2>${cat.title}</h2>${cat.packInfo ? `<div style="color:var(--text-dim);font-size:.8rem;margin-bottom:12px">${cat.packInfo}</div>` : ''}`;
+    renderCatalogSection(cat);
+  });
+}
 
+function getQtyValues(sectionEl) {
+  const vals = {};
+  sectionEl.querySelectorAll('.qty-input').forEach(inp => {
+    const v = parseInt(inp.value) || 0;
+    if (v > 0) vals[inp.dataset.sku] = v;
+  });
+  return vals;
+}
+
+function restoreQtyValues(sectionEl, vals) {
+  sectionEl.querySelectorAll('.qty-input').forEach(inp => {
+    const v = vals[inp.dataset.sku];
+    if (v) { inp.value = v; updateLine(inp); }
+  });
+}
+
+function toggleView(catId) {
+  const sec = document.getElementById('sec-' + catId);
+  const saved = getQtyValues(sec);
+  viewModes[catId] = viewModes[catId] === 'color' ? 'size' : 'color';
+  const cat = CATALOG.find(c => c.id === catId);
+  renderCatalogSection(cat);
+  restoreQtyValues(sec, saved);
+}
+
+function renderCatalogSection(cat) {
+  const sec = document.getElementById('sec-' + cat.id);
+  const mode = viewModes[cat.id];
+  const showToggle = cat.colors.length > 1 && cat.sizes.length > 1;
+
+  let html = `<h2>${cat.title}</h2>${cat.packInfo ? `<div style="color:var(--text-dim);font-size:.8rem;margin-bottom:12px">${cat.packInfo}</div>` : ''}`;
+
+  if (showToggle) {
+    html += `<div class="view-toggle"><span>VIEW BY</span>
+      <button class="${mode === 'color' ? 'active' : ''}" onclick="toggleView('${cat.id}')">COLOR</button>
+      <button class="${mode === 'size' ? 'active' : ''}" onclick="toggleView('${cat.id}')">SIZE</button></div>`;
+  }
+
+  if (mode === 'color') {
     cat.colors.forEach(color => {
       html += `<div class="color-group"><h3>${color}</h3>`;
       html += `<table class="catalog"><thead><tr>
         <th>SIZE</th><th>HOOK</th><th>PRICE</th><th style="text-align:center">PACKS</th><th style="text-align:right">TOTAL</th>
       </tr></thead><tbody>`;
-
       cat.sizes.forEach(sz => {
-        let price = sz.price;
-        if (cat.priceOverrides) {
-          const key = color + '|' + sz.size;
-          if (cat.priceOverrides[key] !== undefined) price = cat.priceOverrides[key];
-        }
-        const skuKey = `${cat.id}|${color}|${sz.size}|${sz.hook}`;
-        html += `<tr>
-          <td>${sz.size}</td>
-          <td>${sz.hook}</td>
-          <td class="price">$${price.toFixed(2)}</td>
-          <td style="text-align:center">
-            <div class="qty-wrap">
-              <button class="qty-btn" onclick="adjustQty(this,-1)">−</button>
-              <input type="number" class="qty-input" min="0" value="0"
-                data-sku="${escHtml(skuKey)}" data-price="${price}"
-                data-cat="${escHtml(cat.title)}" data-color="${escHtml(color)}"
-                data-size="${escHtml(sz.size)}" data-hook="${escHtml(sz.hook)}"
-                oninput="updateLine(this)">
-              <button class="qty-btn" onclick="adjustQty(this,1)">+</button>
-            </div>
-          </td>
-          <td class="line-total" style="text-align:right" id="lt-${hashCode(skuKey)}">—</td>
-        </tr>`;
+        html += buildRow(cat, color, sz);
       });
-
       html += `</tbody></table></div>`;
     });
+  } else {
+    cat.sizes.forEach(sz => {
+      html += `<div class="color-group"><h3>${sz.size} — Hook ${sz.hook}</h3>`;
+      html += `<table class="catalog"><thead><tr>
+        <th>COLOR</th><th>PRICE</th><th style="text-align:center">PACKS</th><th style="text-align:right">TOTAL</th>
+      </tr></thead><tbody>`;
+      cat.colors.forEach(color => {
+        html += buildRowBySize(cat, color, sz);
+      });
+      html += `</tbody></table></div>`;
+    });
+  }
 
-    sec.innerHTML = html;
-    area.appendChild(sec);
-  });
+  sec.innerHTML = html;
+}
+
+function buildRow(cat, color, sz) {
+  let price = sz.price;
+  if (cat.priceOverrides) {
+    const key = color + '|' + sz.size;
+    if (cat.priceOverrides[key] !== undefined) price = cat.priceOverrides[key];
+  }
+  const skuKey = `${cat.id}|${color}|${sz.size}|${sz.hook}`;
+  return `<tr>
+    <td>${sz.size}</td>
+    <td>${sz.hook}</td>
+    <td class="price">$${price.toFixed(2)}</td>
+    <td style="text-align:center">
+      <div class="qty-wrap">
+        <button class="qty-btn" onclick="adjustQty(this,-1)">−</button>
+        <input type="number" class="qty-input" min="0" value="0"
+          data-sku="${escHtml(skuKey)}" data-price="${price}"
+          data-cat="${escHtml(cat.title)}" data-color="${escHtml(color)}"
+          data-size="${escHtml(sz.size)}" data-hook="${escHtml(sz.hook)}"
+          oninput="updateLine(this)">
+        <button class="qty-btn" onclick="adjustQty(this,1)">+</button>
+      </div>
+    </td>
+    <td class="line-total" style="text-align:right" id="lt-${hashCode(skuKey)}">—</td>
+  </tr>`;
+}
+
+function buildRowBySize(cat, color, sz) {
+  let price = sz.price;
+  if (cat.priceOverrides) {
+    const key = color + '|' + sz.size;
+    if (cat.priceOverrides[key] !== undefined) price = cat.priceOverrides[key];
+  }
+  const skuKey = `${cat.id}|${color}|${sz.size}|${sz.hook}`;
+  return `<tr>
+    <td>${color}</td>
+    <td class="price">$${price.toFixed(2)}</td>
+    <td style="text-align:center">
+      <div class="qty-wrap">
+        <button class="qty-btn" onclick="adjustQty(this,-1)">−</button>
+        <input type="number" class="qty-input" min="0" value="0"
+          data-sku="${escHtml(skuKey)}" data-price="${price}"
+          data-cat="${escHtml(cat.title)}" data-color="${escHtml(color)}"
+          data-size="${escHtml(sz.size)}" data-hook="${escHtml(sz.hook)}"
+          oninput="updateLine(this)">
+        <button class="qty-btn" onclick="adjustQty(this,1)">+</button>
+      </div>
+    </td>
+    <td class="line-total" style="text-align:right" id="lt-${hashCode(skuKey)}">—</td>
+  </tr>`;
 }
 
 function switchTab(id) {
