@@ -4987,11 +4987,20 @@ const KNOWN_SHOPS = [
   { email: 'RSimoneau@turners.com',             name: "Turner's Outdoorsman", shopKey: 'turners' },
   { email: 'KTibbets@turners.com',              name: "Turner's Outdoorsman", shopKey: 'turners' },
   { email: 'DMontes@turners.com',               name: "Turner's Outdoorsman", shopKey: 'turners' },
+  { email: 'EKing@turners.com',                 name: "Turner's Outdoorsman", shopKey: 'turners' },
+  { email: 'accountspayable@turnersoutdoorsman.onmicrosoft.com', name: "Turner's Outdoorsman", shopKey: 'turners' },
   { email: 'jacobvlastnik@yahoo.com',           name: 'Fishermans Access',    shopKey: 'fish'    },
   { email: 'johnnyssportshop1@gmail.com',       name: "Johnny's Sport Shop",  shopKey: 'johnnys' },
   { email: 'marc@performancetackle.com',        name: 'Performance Tackle',   shopKey: 'perf'    },
   { email: 'sales@anglerschoicetackle.com',     name: "Angler's Choice",      shopKey: 'anglers' },
   { email: 'accounting@anglerschoicetackle.com',name: "Angler's Choice",      shopKey: 'anglers' },
+  { email: 'jeff@meltontackle.com',             name: 'Melton Tackle',        shopKey: 'melton'  },
+  { email: 'elliotc@meltontackle.com',          name: 'Melton Tackle',        shopKey: 'melton'  },
+  { email: 'noreply@lightspeedhq.com',          name: 'Lightspeed POS',       shopKey: 'lightspeed' },
+  { email: 'sbbigfish@gmail.com',               name: 'BigFish Bait',         shopKey: 'bigfish' },
+  { email: 'tacklecaveusa@gmail.com',            name: 'TackleCave',           shopKey: 'tacklecave' },
+  { email: 'dean@thelongfin.com',                name: 'The Longfin',          shopKey: 'longfin' },
+  { email: 'tackle@hmlanding.com',               name: 'H&M Landing',          shopKey: 'hmlanding' },
 ];
 
 // ── Per-shop deterministic classification ────────────────────────────────────
@@ -5010,12 +5019,17 @@ function _shopClassify(shopKey, subject, snippet, attachments) {
         : { isOrder: false, reason: 'Not an order subject' };
 
     case 'turners':
-      // Kyle's orders: subject contains "viking heads" + "order", no invoice/price-list noise
-      // OR body contains his standard "Evelyn can you build the attached PO" line
+      // Evelyn's POs: "Po 245293 Vikingheads" or "Po 245043 Vikingheads"
+      // Kyle's orders: subject contains "viking heads" + "order", or just "viking heads" with attachment
+      // Also catches "Viking heads show order" and "viking heads order.xlsx"
+      if (/\bpo\s+\d+\b/i.test(subject) && /viking/i.test(subject) && !/invoice|price.?list|re:|fw:/i.test(subject))
+        return { isOrder: true,  reason: "Turner's PO subject" };
       if (/viking.?heads/i.test(subject) && /\border\b/i.test(subject) && !/invoice|price.?list/i.test(subject))
         return { isOrder: true,  reason: "Turner's order subject" };
-      if (/evelyn.{0,40}build.{0,40}po/i.test(snip))
+      if (/evelyn.{0,40}(build|process).{0,40}(po|order)/i.test(snip))
         return { isOrder: true,  reason: "Turner's PO build request" };
+      if (/can you please process this order/i.test(snip))
+        return { isOrder: true,  reason: "Turner's process request" };
       return { isOrder: false, reason: 'Not a Turner\'s order' };
 
     case 'tw': {
@@ -5043,9 +5057,51 @@ function _shopClassify(shopKey, subject, snippet, attachments) {
       // Aaron names his file "Reel Addiction Order X.xlsx", or body says "Attached is our … order"
       if (/order/i.test(attStr))
         return { isOrder: true,  reason: 'Order in filename' };
-      if (/attached is our|attached.*first order/i.test(snip))
+      if (/attached is our|attached.*first order|attached.*order/i.test(snip))
         return { isOrder: true,  reason: 'Order attached in body' };
       return { isOrder: false, reason: 'No order signal' };
+
+    case 'melton':
+      // Jeff Peck sends "Purchase Order PO##### for VIKINGHEADS"
+      if (/purchase\s+order\s+po\d+/i.test(subject))
+        return { isOrder: true,  reason: 'Melton Tackle PO' };
+      return { isOrder: false, reason: 'Not a Melton PO' };
+
+    case 'lightspeed': {
+      // Lightspeed POS sends for multiple shops: "Anglers Choice Purchase Order #XXXX",
+      // "The Longfin Fishing Tackle Purchase Order #XXX", etc.
+      const lsMatch = subject.match(/^(.+?)\s+Purchase\s+Order\s+#\d+/i);
+      if (lsMatch) return { isOrder: true,  reason: `${lsMatch[1].trim()} PO via Lightspeed` };
+      return { isOrder: false, reason: 'Not a Lightspeed PO' };
+    }
+
+    case 'bigfish':
+      // BigFish Bait — orders via subject or body text ("here is another order", attachment with order)
+      if (/order|po\b/i.test(subject) || /order|po\b/i.test(attStr))
+        return { isOrder: true,  reason: 'BigFish Bait order' };
+      if (/here is another order|place a new order|here.{0,20}order/i.test(snip))
+        return { isOrder: true,  reason: 'BigFish order in body' };
+      return null; // Fall through to AI for ambiguous emails
+
+    case 'tacklecave':
+      // TackleCave — orders have "order" or "PO" in subject, or body text with items
+      if (/\border\b|po\b/i.test(subject) && !/re:/i.test(subject))
+        return { isOrder: true,  reason: 'TackleCave order' };
+      if (/can we.*make another.*order|please.*order.*items below/i.test(snip))
+        return { isOrder: true,  reason: 'TackleCave order in body' };
+      return null; // Fall through to AI
+
+    case 'longfin':
+      // Dean from The Longfin — direct emails (POs come via Lightspeed separately)
+      if (/order|po\b|purchase/i.test(subject) && !/invoice|thank|free freight/i.test(subject))
+        return { isOrder: true,  reason: 'Longfin direct order' };
+      return null; // Fall through to AI
+
+    case 'hmlanding':
+      // H&M Landing — new potential customer
+      if (/order|po\b|purchase/i.test(subject))
+        return { isOrder: true,  reason: 'H&M Landing order' };
+      return null;
 
     default:
       return null; // Unknown shop → AI screener decides
@@ -5151,27 +5207,30 @@ async function _showGmailModal() {
   document.body.appendChild(modal);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
-  // Two parallel queries:
-  //  Q1 — all shops with attachments (covers most orders)
+  // Three parallel queries:
+  //  Q1 — known shops with attachments (covers most orders)
   //  Q2 — TW-specific without attachment requirement (TW orders are often URL-only)
+  //  Q3 — broad catch-all: any email with attachments + order-like keywords (catches new/unknown shops)
   const twShops      = KNOWN_SHOPS.filter(s => s.shopKey === 'tw');
   const fromAll      = KNOWN_SHOPS.map(s => `from:${s.email}`).join(' OR ');
   const fromTw       = twShops.map(s => `from:${s.email}`).join(' OR ');
   const q1 = encodeURIComponent(`has:attachment (${fromAll})`);
   const q2 = encodeURIComponent(`(${fromTw}) subject:"Tackle Warehouse PO"`);
+  const q3 = encodeURIComponent(`has:attachment {subject:order subject:PO subject:"purchase order"} -label:sent`);
 
   try {
-    const [res1, res2] = await Promise.all([
+    const [res1, res2, res3] = await Promise.all([
       fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${q1}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
       fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${q2}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
+      fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=${q3}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
     ]);
-    if ((!res1.ok && res1.status === 401) || (!res2.ok && res2.status === 401)) { _gmailToken = null; showToast('Gmail session expired — click Pull again', 'error'); return; }
-    const [d1, d2] = await Promise.all([res1.json(), res2.json()]);
+    if ((!res1.ok && res1.status === 401) || (!res2.ok && res2.status === 401) || (!res3.ok && res3.status === 401)) { _gmailToken = null; showToast('Gmail session expired — click Pull again', 'error'); return; }
+    const [d1, d2, d3] = await Promise.all([res1.json(), res2.json(), res3.json()]);
 
     // Merge and deduplicate by message ID
     const seen   = new Set();
     const msgIds = [];
-    for (const m of [...(d1.messages || []), ...(d2.messages || [])]) {
+    for (const m of [...(d1.messages || []), ...(d2.messages || []), ...(d3.messages || [])]) {
       if (!seen.has(m.id)) { seen.add(m.id); msgIds.push(m.id); }
     }
 
@@ -5218,9 +5277,9 @@ async function _showGmailModal() {
         const allParts    = msg.payload?.parts || (msg.payload ? [msg.payload] : []);
         const attachments = findAttachmentParts(allParts, msg.id);
 
-        // TW emails are valid even without importable attachments (order is a URL)
-        const isTwShop = shopEntry?.shopKey === 'tw';
-        if (!attachments.length && !isTwShop) return null;
+        // Known shops and TW emails are valid even without importable attachments
+        // (TW orders are URL-only; some shops send orders inline in email body)
+        if (!attachments.length && !shopEntry) return null;
 
         // Run per-shop deterministic classifier
         const ruled = shopEntry ? _shopClassify(shopEntry.shopKey, subject, snippet, attachments) : null;
@@ -5231,9 +5290,16 @@ async function _showGmailModal() {
         const isTW         = ruled?.isTW   || false;
         const twUrls       = ruled?.twUrls || [];
 
+        // For Lightspeed POS emails, extract real shop name from subject
+        let shopName = shopEntry?.name || fromEmail;
+        if (shopEntry?.shopKey === 'lightspeed') {
+          const lsMatch = subject.match(/^(.+?)\s+Purchase\s+Order\s+#\d+/i);
+          if (lsMatch) shopName = lsMatch[1].trim();
+        }
+
         return {
           msgId: msg.id,
-          shop: shopEntry?.name || fromEmail,
+          shop: shopName,
           shopKey: shopEntry?.shopKey || '',
           subject, date, snippet, attachments,
           isSuspect, shopScreened, shopReason,
@@ -5295,24 +5361,33 @@ async function _showGmailModal() {
         return;
       }
 
-      // ── All other shops: one row per attachment ──
-      row.attachments.forEach(att => {
-        // Escape single quotes in all string values injected into the onclick attribute
-        const safeShop = row.shop.replace(/'/g, "\\'");
-        const safeName = att.name.replace(/'/g, "\\'");
-        const safeAttId = (att.id||'').replace(/'/g, "\\'");
-        const safeMsgId = (row.msgId||'').replace(/'/g, "\\'");
+      // ── All other shops: one row per attachment, or a single row if no attachments ──
+      if (row.attachments.length) {
+        row.attachments.forEach(att => {
+          const safeShop = row.shop.replace(/'/g, "\\'");
+          const safeName = att.name.replace(/'/g, "\\'");
+          const safeAttId = (att.id||'').replace(/'/g, "\\'");
+          const safeMsgId = (row.msgId||'').replace(/'/g, "\\'");
+          html += `<tr style="${row.isSuspect ? 'opacity:0.6' : ''}">
+            <td style="color:#c9a227;font-weight:bold">${row.shop}</td>
+            <td style="font-size:12px">${row.subject}${warnBadge}</td>
+            <td class="muted" style="font-size:12px">${dateStr}</td>
+            <td style="font-size:12px">${att.name}</td>
+            <td><button class="btn btn-gold btn-sm"
+              onclick="importGmailAttachment(this,'${safeMsgId}','${safeAttId}','${safeName}','${att.mimeType}','${safeShop}')">
+              Import
+            </button></td>
+          </tr>`;
+        });
+      } else {
+        // No attachments — show row with note (e.g. inline text orders)
         html += `<tr style="${row.isSuspect ? 'opacity:0.6' : ''}">
           <td style="color:#c9a227;font-weight:bold">${row.shop}</td>
           <td style="font-size:12px">${row.subject}${warnBadge}</td>
           <td class="muted" style="font-size:12px">${dateStr}</td>
-          <td style="font-size:12px">${att.name}</td>
-          <td><button class="btn btn-gold btn-sm"
-            onclick="importGmailAttachment(this,'${safeMsgId}','${safeAttId}','${safeName}','${att.mimeType}','${safeShop}')">
-            Import
-          </button></td>
+          <td colspan="2" class="muted" style="font-size:11px">No attachment — check email for inline order</td>
         </tr>`;
-      });
+      }
     });
 
     html += '</tbody></table>';
