@@ -1313,6 +1313,40 @@ function applyMigrations(d) {
     });
     d._seededMeltonPO96039v3 = true;
   }
+  // Migration: seed Best Fishing order (03/23/26)
+  if (!d._seededBestFishing0323) {
+    const bfItems = [
+      { sku:'VKS14BF',   qty:12 }, { sku:'VKS14BB',    qty:12 },
+      { sku:'VKS14MT',   qty:12 }, { sku:'VKS14RED',   qty:12 },
+      { sku:'VKS38BF',   qty:24 }, { sku:'VKS38BB',    qty:24 },
+      { sku:'VKS382MT',  qty:24 }, { sku:'VKS38RED',   qty:24 },
+      { sku:'VKS12BF',   qty:24 }, { sku:'VKS12BB',    qty:24 },
+      { sku:'VKS122MT',  qty:24 }, { sku:'VKS12RED',   qty:24 },
+      { sku:'VKS34BF',   qty:24 }, { sku:'VKS34BB',    qty:24 },
+      { sku:'VKS34MT',   qty:24 }, { sku:'VKS34RED',   qty:24 },
+    ].map(({ sku, qty }) => {
+      const def = SKU_TABLE[sku];
+      if (!def) return null;
+      const heads = qty * (HEADS_PER_BAG[def.productType] || 1);
+      return {
+        sku, productType: def.productType, size: def.size, color: def.color,
+        hookSize: def.hookSize, hookKey: def.hookKey, quantity: qty,
+        components: calcDeductionsForSku(def, heads),
+        itemStatus: { poured: false, loaded: false, painted: false },
+      };
+    }).filter(Boolean);
+    d.orders.unshift({
+      id: 'bestfishing_0323',
+      shop: 'Best Fishing',
+      dueDate: '2026-04-13',
+      notes: '',
+      createdAt: '2026-03-23T00:00:00.000Z',
+      status: 'pending',
+      archived: false,
+      items: bfItems,
+    });
+    d._seededBestFishing0323 = true;
+  }
   // Migration: recalculate order item components using bags→heads conversion
   if (!d._migratedBagComponents) {
     d.orders.forEach(order => {
