@@ -3797,11 +3797,8 @@ function renderOrderCard(order) {
   const isPoured  = order.status === 'poured';
   const isPartial = order.status === 'partial';
   const canShip   = isPoured || isPartial;
-  const statusBadge = isPoured
-    ? `<span style="color:#4caf7d;font-size:10px;letter-spacing:1px">POURED</span>`
-    : isPartial
-      ? `<span style="color:#e8a870;font-size:10px;letter-spacing:1px">PARTIAL</span>`
-      : `<span style="color:#e8a020;font-size:10px;letter-spacing:1px">PENDING</span>`;
+  const statusColors = { poured: '#4caf7d', partial: '#e8a870', pending: '#e8a020', shipped: '#4a9ae8' };
+  const statusBadge = `<span id="order-status-${order.id}" style="color:${statusColors[order.status] || '#e8a020'};font-size:10px;letter-spacing:1px">${order.status.toUpperCase()}</span>`;
   const pourBtn = canShip
     ? `<span style="color:#3a5a7a;font-size:11px">${isPartial ? 'Partial' : 'Poured'}</span>`
     : `<button class="btn btn-gold btn-sm" onclick="event.stopPropagation();markOrderPoured('${order.id}')">Mark as Poured</button>`;
@@ -4237,12 +4234,16 @@ function toggleItemStatus(orderId, itemIdx, field) {
     order.status = 'pending';
   }
   save(data);
-  // Re-render if status changed
+  // Update status badge in-place if it changed
   if (order.status !== oldStatus) {
-    render(activePage);
-    return;
+    const badge = document.getElementById('order-status-' + orderId);
+    if (badge) {
+      const colors = { pending: '#3a5a7a', partial: '#c9a227', poured: '#4caf7d', shipped: '#4a9ae8' };
+      badge.textContent = order.status.toUpperCase();
+      badge.style.background = colors[order.status] || '#3a5a7a';
+    }
   }
-  // Otherwise just update the clicked segment's color
+  // Update the clicked segment's color
   const seg = document.getElementById(`status-${orderId}-${itemIdx}-${field}`);
   if (seg) {
     const activeColor = field === 'painted' ? '#4caf7d' : '#c9a227';
@@ -4527,7 +4528,15 @@ function bulkSetItemStatus(orderId, field, value) {
     order.status = 'pending';
   }
   save(data);
-  if (order.status !== oldStatus) { render(activePage); return; }
+  // Update status badge in-place
+  if (order.status !== oldStatus) {
+    const badge = document.getElementById('order-status-' + orderId);
+    if (badge) {
+      const colors = { pending: '#3a5a7a', partial: '#c9a227', poured: '#4caf7d', shipped: '#4a9ae8' };
+      badge.textContent = order.status.toUpperCase();
+      badge.style.color = colors[order.status] || '#3a5a7a';
+    }
+  }
   const det = document.getElementById('order-details-' + orderId);
   if (det && det.style.display !== 'none') det.innerHTML = renderOrderDetailsContent(order);
   showToast(value ? `All items marked ${field}` : `${field} cleared`);
