@@ -497,31 +497,29 @@
       .order-sort-wrap.open { display: block; }
       .order-sort-toggle { display: flex !important; }
 
-      /* Details: switch from table to card layout */
+      /* Details: switch from table to compact card layout */
       .order-detail-table thead { display: none; }
       .order-detail-table tbody tr {
         display: grid;
         grid-template-columns: 1fr auto;
-        grid-template-rows: auto auto auto;
-        gap: 2px 8px;
-        padding: 8px 0;
-        border-bottom: 1px solid #1a3050;
+        grid-template-rows: auto auto;
+        gap: 0 8px;
+        padding: 5px 0;
+        border-bottom: 1px solid rgba(26,48,80,.5);
       }
       .order-detail-table tbody tr:last-child { border-bottom: none; }
-      /* SKU + Qty */
-      .order-detail-table .odt-sku  { grid-column: 1; grid-row: 1; font-weight: 600; color: #c9a227; font-size: 12px; }
-      .order-detail-table .odt-qty  { grid-column: 2; grid-row: 1; text-align: right; font-weight: 700; }
-      /* Product + Size + Color + Hook in one line */
-      .order-detail-table .odt-desc { grid-column: 1 / -1; grid-row: 2; font-size: 11px; color: #5a7a9a; }
-      /* Status bar full width */
-      .order-detail-table .odt-status { grid-column: 1 / -1; grid-row: 3; padding: 4px 0 !important; }
+      /* Row 1: description + qty */
+      .order-detail-table .odt-sku  { display: none; }
+      .order-detail-table .odt-desc { grid-column: 1; grid-row: 1; font-size: 11px; color: #8aadcf; display: block !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .order-detail-table .odt-qty  { grid-column: 2; grid-row: 1; text-align: right; font-weight: 700; font-size: 12px; }
+      /* Row 2: status bar */
+      .order-detail-table .odt-status { grid-column: 1 / -1; grid-row: 2; padding: 2px 0 !important; }
       .order-detail-table .odt-status > div { min-width: 0 !important; }
-      /* Hide individual columns, show combined desc */
+      /* Hide individual columns */
       .order-detail-table .odt-hide { display: none; }
-      .order-detail-table .odt-desc { display: block !important; }
       /* Total row */
       .order-detail-table .odt-total-row {
-        display: flex !important; align-items: center; gap: 8px; padding: 10px 0;
+        display: flex !important; align-items: center; gap: 8px; padding: 8px 0;
         border-top: 2px solid #1a3050;
       }
       .order-detail-table .odt-total-row td { display: inline; border: none; padding: 0; }
@@ -3706,7 +3704,7 @@ function renderOrderDetailsContent(order) {
       const on = !!st[field];
       return `<div id="status-${order.id}-${idx}-${field}"
         onclick="toggleItemStatus('${order.id}',${idx},'${field}')"
-        style="flex:1;text-align:center;font-size:9px;padding:5px 4px;cursor:pointer;letter-spacing:.8px;user-select:none;transition:background .15s;background:${on ? activeColor : '#071420'};color:${on ? '#0d1b2a' : '#3a5a7a'}"
+        style="flex:1;text-align:center;font-size:8px;padding:3px 2px;cursor:pointer;letter-spacing:.6px;user-select:none;transition:background .15s;background:${on ? activeColor : '#071420'};color:${on ? '#0d1b2a' : '#3a5a7a'}"
       >${label}</div>`;
     };
     const statusBar = `<div style="display:flex;border-radius:3px;overflow:hidden;border:1px solid #1a3050;min-width:155px">
