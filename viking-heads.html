@@ -1200,9 +1200,8 @@ function applyMigrations(d) {
   // Migration: seed Tackle Warehouse order (03/31/26)
   if (!d._seededTackleWarehouse0331) {
     const twItems = [
-      { sku:'VFH1820GBF',    qty:12 }, { sku:'VFH31620CMDO',  qty:6  },
-      { sku:'VFH31620SH',   qty:12 }, { sku:'VFH31630SH',    qty:6  },
-      { sku:'VKS12BF',      qty:12 },
+      { sku:'VFH1820GBF',    qty:12 }, { sku:'VFH31620CMDO',  qty:18 },
+      { sku:'VFH31630CMDO',  qty:6  }, { sku:'VKS12BF',       qty:12 },
       { sku:'VKS122MT',      qty:6  }, { sku:'VKS14BB',       qty:6  },
       { sku:'VKS14BF',       qty:6  }, { sku:'VKS14CMDO',     qty:6  },
       { sku:'VKS1CMDO',      qty:6  }, { sku:'VKS1GD',        qty:6  },
@@ -1225,7 +1224,7 @@ function applyMigrations(d) {
       id: 'tw_order_20260331',
       shop: 'Tackle Warehouse',
       dueDate: '2026-04-14',
-      notes: 'Ship date 4/2/26 — FFA $1000 Net 30',
+      notes: 'Ship date 4/2/26 — FFA $1000 Net 30 — Shad items mapped to Commando',
       createdAt: new Date().toISOString(),
       status: 'pending',
       archived: false,
@@ -1248,9 +1247,9 @@ function applyMigrations(d) {
       { sku:'VKS14BF',      qty:12 }, { sku:'VKS38BF',      qty:12 },
       { sku:'VKS12BF',      qty:12 }, { sku:'VKS34BF',      qty:12 },
       { sku:'VKS1BF',       qty:12 },
-      { sku:'VKH1430SHD',   qty:6  }, { sku:'VKH3840SHD',   qty:6  },
+      { sku:'VKH1430CMDO',  qty:6  }, { sku:'VKH3840CMDO',  qty:6  },
       { sku:'VKH3840RED',   qty:6  }, { sku:'VKH3840BBF',   qty:6  },
-      { sku:'VFH1820CMDO',  qty:6  }, { sku:'VFH1820SH',    qty:6  },
+      { sku:'VFH1820CMDO',  qty:12 },
     ].map(({ sku, qty }) => {
       const def = SKU_TABLE[sku];
       if (!def) return null;
@@ -1266,7 +1265,7 @@ function applyMigrations(d) {
       id: 'longfin_po234',
       shop: 'The Longfin Fishing Tackle',
       dueDate: '2026-04-14',
-      notes: 'PO#234',
+      notes: 'PO#234 — Shad items mapped to Commando',
       createdAt: '2026-03-23T00:00:00.000Z',
       status: 'pending',
       archived: false,
@@ -1283,11 +1282,9 @@ function applyMigrations(d) {
       { sku:'VKS38CMDO',    qty:18 }, { sku:'VKS38BF',       qty:6  },
       { sku:'VKS34CMDO',    qty:12 }, { sku:'VKS34BB',       qty:6  },
       { sku:'VKS34GD',      qty:6  }, { sku:'VKS1BB',        qty:6  },
-      { sku:'VFH31620CMDO', qty:6  }, { sku:'VFH31620SH',    qty:6  },
-      { sku:'VFH31620GBF',  qty:6  }, { sku:'VFH31620BBF',   qty:12 },
-      { sku:'VFH31630GBF',  qty:6  },
-      { sku:'VFH1420CMDO',  qty:6  }, { sku:'VFH1420SH',     qty:6  },
-      { sku:'VFH1420PBF',   qty:6  },
+      { sku:'VFH31620CMDO', qty:12 }, { sku:'VFH31620GBF',   qty:6  },
+      { sku:'VFH31620BBF',  qty:12 }, { sku:'VFH31630GBF',   qty:6  },
+      { sku:'VFH1420CMDO',  qty:12 }, { sku:'VFH1420PBF',    qty:6  },
       { sku:'VFH01430BBF',  qty:6  }, { sku:'VFH1430PBF',    qty:6  },
     ].map(({ sku, qty }) => {
       const def = SKU_TABLE[sku];
@@ -1304,7 +1301,7 @@ function applyMigrations(d) {
       id: 'melton_po96039_v2',
       shop: 'Melton Tackle',
       dueDate: '2026-04-14',
-      notes: 'PO96039 pg1 — no VK rigs — page 2 pending',
+      notes: 'PO96039 pg1 — Shad mapped to Commando, no VK rigs — page 2 pending',
       createdAt: '2026-03-23T00:00:00.000Z',
       status: 'pending',
       archived: false,
