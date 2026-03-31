@@ -3800,9 +3800,6 @@ function renderOrderCard(order) {
   const canShip   = isPoured || isPartial;
   const statusColors = { poured: '#4caf7d', partial: '#e8a870', pending: '#e8a020', shipped: '#4a9ae8' };
   const statusBadge = `<span id="order-status-${order.id}" style="color:${statusColors[order.status] || '#e8a020'};font-size:10px;letter-spacing:1px">${order.status.toUpperCase()}</span>`;
-  const pourBtn = canShip
-    ? `<span style="color:#3a5a7a;font-size:11px">${isPartial ? 'Partial' : 'Poured'}</span>`
-    : `<button class="btn btn-gold btn-sm" onclick="event.stopPropagation();markOrderPoured('${order.id}')">Mark as Poured</button>`;
   const shipBtn = canShip
     ? `<button class="btn btn-sm" style="background:#0a3020;border-color:#1a6040;color:#4cdf8d" onclick="event.stopPropagation();showShipPanel('${order.id}')">📦 Ship</button>`
     : '';
@@ -3848,7 +3845,6 @@ function renderOrderCard(order) {
       </div>
       <div class="oc-row3">
         <button id="order-toggle-${order.id}" class="btn btn-sm" onclick="event.stopPropagation();toggleOrderDetails('${order.id}')">▼ Details</button>
-        ${pourBtn}
         ${shipBtn}
         <button class="btn btn-sm" onclick="event.stopPropagation();printOrder('${order.id}')">🖨</button>
         <button class="btn btn-sm" onclick="event.stopPropagation();duplicateOrder('${order.id}')" title="Clone this order">⧉</button>
@@ -3867,60 +3863,6 @@ function renderOrderCard(order) {
 // ORDERS — ACTIONS
 // ============================================================
 
-function markOrderPoured(orderId) {
-  const data  = load();
-  const order = data.orders.find(o => o.id === orderId);
-  if (!order || order.status === 'poured') return;
-
-  const unpouredItems = order.items.filter(i => !i.itemStatus?.poured);
-
-  // If all items were already poured individually, just finalize order status
-  if (!unpouredItems.length) {
-    order.status = 'poured';
-    save(data);
-    renderOrders();
-    showToast('All items already poured — order marked as poured');
-    return;
-  }
-
-  const allComponents = aggregateComponents(unpouredItems.map(i => i.components));
-  const warn = checkShortfall(allComponents);
-  const alreadyPoured = order.items.length - unpouredItems.length;
-  const alreadyNote = alreadyPoured ? `\n(${alreadyPoured} item${alreadyPoured > 1 ? 's' : ''} already poured individually — skipped)` : '';
-  const msg  = warn.length
-    ? 'Insufficient stock:\n' + warn.join('\n') + alreadyNote + '\n\nMark as poured anyway?'
-    : `Mark order for "${order.shop}" as poured and deduct components?${alreadyNote}`;
-  if (!confirm(msg)) return;
-
-  Object.entries(allComponents).forEach(([k, v]) => {
-    data.components[k] = (data.components[k] || 0) - v;
-  });
-
-  const now = new Date().toISOString();
-  unpouredItems.forEach(item => {
-    data.pours.unshift({
-      id:          Date.now().toString(36) + Math.random().toString(36).slice(2),
-      date:        now,
-      productType: item.productType,
-      size:        item.size,
-      color:       item.color,
-      quantity:    item.quantity,
-      hookSize:    item.hookSize || null,
-      deductions:  item.components,
-      orderId:     order.id,
-      shop:        order.shop,
-    });
-  });
-
-  order.status = 'poured';
-  order.items.forEach(item => {
-    item.itemStatus = item.itemStatus || {};
-    item.itemStatus.poured = true;
-  });
-  save(data);
-  syncVendorOrderStatus(orderId, 'poured');
-  renderOrders();
-}
 
 // ============================================================
 // ORDERS — SHIP
