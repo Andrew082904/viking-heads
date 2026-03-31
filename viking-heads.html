@@ -4185,14 +4185,21 @@ function toggleItemStatus(orderId, itemIdx, field) {
   if (!order.items[itemIdx].itemStatus) order.items[itemIdx].itemStatus = { poured: false, loaded: false, painted: false };
   const newVal = !order.items[itemIdx].itemStatus[field];
   order.items[itemIdx].itemStatus[field] = newVal;
-  // Auto-promote order status if all items are now poured
-  const allPoured = order.items.every(it => it.itemStatus?.poured);
-  if (allPoured && order.status !== 'poured' && order.status !== 'shipped') {
-    order.status = 'poured';
+  // Auto-promote order status based on item progress
+  const allPoured  = order.items.every(it => it.itemStatus?.poured);
+  const allDone    = order.items.every(it => it.itemStatus?.poured && it.itemStatus?.loaded && it.itemStatus?.painted);
+  const someDone   = order.items.some(it => it.itemStatus?.poured || it.itemStatus?.loaded || it.itemStatus?.painted);
+  const oldStatus  = order.status;
+  if (allDone && order.status !== 'shipped') {
+    order.status = 'poured';   // fully complete — ready to ship
+  } else if (someDone && order.status !== 'shipped') {
+    order.status = 'partial';
+  } else if (!someDone && order.status !== 'shipped') {
+    order.status = 'pending';
   }
   save(data);
-  // Re-render the order card + details if status was promoted
-  if (allPoured && order.status === 'poured') {
+  // Re-render if status changed
+  if (order.status !== oldStatus) {
     render(activePage);
     return;
   }
@@ -4469,13 +4476,19 @@ function bulkSetItemStatus(orderId, field, value) {
     if (!item.itemStatus) item.itemStatus = { poured: false, loaded: false, painted: false };
     item.itemStatus[field] = value;
   });
-  // Auto-promote order status if all items are now poured
-  const allPoured = order.items.every(it => it.itemStatus?.poured);
-  if (allPoured && order.status !== 'poured' && order.status !== 'shipped') {
+  // Auto-promote order status based on item progress
+  const allDone  = order.items.every(it => it.itemStatus?.poured && it.itemStatus?.loaded && it.itemStatus?.painted);
+  const someDone = order.items.some(it => it.itemStatus?.poured || it.itemStatus?.loaded || it.itemStatus?.painted);
+  const oldStatus = order.status;
+  if (allDone && order.status !== 'shipped') {
     order.status = 'poured';
+  } else if (someDone && order.status !== 'shipped') {
+    order.status = 'partial';
+  } else if (!someDone && order.status !== 'shipped') {
+    order.status = 'pending';
   }
   save(data);
-  if (allPoured && order.status === 'poured') { render(activePage); return; }
+  if (order.status !== oldStatus) { render(activePage); return; }
   const det = document.getElementById('order-details-' + orderId);
   if (det && det.style.display !== 'none') det.innerHTML = renderOrderDetailsContent(order);
   showToast(value ? `All items marked ${field}` : `${field} cleared`);
