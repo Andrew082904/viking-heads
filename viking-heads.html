@@ -494,7 +494,8 @@
 
       /* Sort bars: collapse into a toggle */
       .order-sort-wrap { display: none; }
-      .order-sort-wrap.open { display: block; }
+      .order-sort-wrap.open { display: block; padding: 10px; background: #0a1520; border: 1px solid #1a3050; border-radius: 4px; margin-bottom: 10px; }
+      .order-sort-wrap .btn-sm { font-size: 11px; padding: 5px 10px; }
       .order-sort-toggle { display: flex !important; }
 
       /* Details: switch from table to compact card layout */
@@ -3558,7 +3559,7 @@ function renderOrders() {
 
   // Sort controls
   const sortBar = `
-  <button class="btn btn-sm order-sort-toggle" style="display:none;margin-bottom:8px;width:100%" onclick="this.nextElementSibling.classList.toggle('open')">⇅ Sort & Filter</button>
+  <button class="btn btn-gold btn-sm order-sort-toggle" style="display:none;margin-bottom:8px;width:100%" onclick="this.nextElementSibling.classList.toggle('open')">⇅ Sort & Filter</button>
   <div class="order-sort-wrap">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
     <span class="muted" style="font-size:11px;min-width:68px">Order Sort:</span>
