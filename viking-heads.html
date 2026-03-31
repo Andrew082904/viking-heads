@@ -466,6 +466,13 @@
       .col-created    { display: none; }
     }
 
+    /* ---- Mobile Dashboard ---- */
+    .dash-scroll-box { max-height: 55vh; overflow-y: auto; }
+    @media (max-width: 600px) {
+      .dash-grid { grid-template-columns: 1fr !important; }
+      .dash-scroll-box { max-height: 40vh; }
+    }
+
     /* ---- Mobile Orders overhaul ---- */
     @media (max-width: 600px) {
       /* Order card header: stack into clean rows */
@@ -1317,10 +1324,10 @@ function renderDashboard() {
   // Low stock components
   const _thresholds = getComponentThresholds();
   const lowStockItems = COMPONENTS.filter(def => (data.components[def.key] || 0) < (_thresholds[def.label] || 50))
-    .map(def => ({ label: def.label, qty: data.components[def.key] || 0, threshold: _thresholds[def.label] || 50 }))
+    .map(def => ({ label: def.label + (def.size ? ' ' + def.size : ''), qty: data.components[def.key] || 0, threshold: _thresholds[def.label] || 50 }))
     .sort((a, b) => (a.qty / a.threshold) - (b.qty / b.threshold));
 
-  let html = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">`;
+  let html = `<div class="dash-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">`;
 
   // ---- Active Orders box ----
   html += `<div style="background:#0e1f30;border:1px solid #1a3050;border-radius:6px;padding:16px;cursor:pointer" onclick="showPage('orders')">
@@ -1329,6 +1336,7 @@ function renderDashboard() {
       <div style="color:#c9a227;font-size:22px;font-weight:bold">${activeOrders.length}</div>
     </div>`;
 
+  html += `<div class="dash-scroll-box">`;
   if (activeOrders.length) {
     activeOrders.sort((a, b) => {
       if (!a.dueDate) return 1; if (!b.dueDate) return -1;
@@ -1354,7 +1362,7 @@ function renderDashboard() {
   } else {
     html += `<div class="muted" style="text-align:center;padding:20px;font-size:12px">No active orders</div>`;
   }
-  html += `</div>`;
+  html += `</div></div>`;
 
   // ---- Low Stock box ----
   html += `<div style="background:#0e1f30;border:1px solid #1a3050;border-radius:6px;padding:16px;cursor:pointer" onclick="showPage('components')">
@@ -1363,6 +1371,7 @@ function renderDashboard() {
       <div style="color:${lowStockItems.length ? '#e09050' : '#4caf7d'};font-size:22px;font-weight:bold">${lowStockItems.length}</div>
     </div>`;
 
+  html += `<div class="dash-scroll-box">`;
   if (lowStockItems.length) {
     lowStockItems.forEach(item => {
       const pct = Math.min(100, Math.round((item.qty / item.threshold) * 100));
@@ -1379,7 +1388,7 @@ function renderDashboard() {
   } else {
     html += `<div style="color:#4caf7d;text-align:center;padding:20px;font-size:12px">All components above threshold</div>`;
   }
-  html += `</div>`;
+  html += `</div></div>`;
 
   html += `</div>`;
   wrap.innerHTML = html;
