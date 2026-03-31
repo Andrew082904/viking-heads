@@ -4978,29 +4978,64 @@ async function startWithAuthGate() {
 const GMAIL_CLIENT_ID = '724553436284-s8s1u9h80pgmsoiqp08vpj06a3lmj0d9.apps.googleusercontent.com';
 const GMAIL_SCOPE     = 'https://www.googleapis.com/auth/gmail.readonly';
 
-// Known shop senders — used to filter the inbox search.
+// ── Customer shops — emails that may contain purchase orders ──────────────────
 // shopKey drives per-shop deterministic classification rules in _shopClassify().
 const KNOWN_SHOPS = [
+  // Reel Addiction — Aaron Jeffrey. Orders as reply threads with .xlsx attachment.
   { email: 'fearnofish86@gmail.com',            name: 'Reel Addiction',       shopKey: 'reel'    },
+  // Tackle Warehouse — Doug/Jessi. Orders via URL links, no attachment.
   { email: 'doug.horvath@tacklewarehouse.com',  name: 'Tackle Warehouse',     shopKey: 'tw'      },
   { email: 'jessi.grant@tacklewarehouse.com',   name: 'Tackle Warehouse',     shopKey: 'tw'      },
-  { email: 'RSimoneau@turners.com',             name: "Turner's Outdoorsman", shopKey: 'turners' },
+  // Turner's Outdoorsman — Kyle (PO files), Evelyn (processes POs), Renee (AP), Diana (logistics).
   { email: 'KTibbets@turners.com',              name: "Turner's Outdoorsman", shopKey: 'turners' },
-  { email: 'DMontes@turners.com',               name: "Turner's Outdoorsman", shopKey: 'turners' },
   { email: 'EKing@turners.com',                 name: "Turner's Outdoorsman", shopKey: 'turners' },
+  { email: 'DMontes@turners.com',               name: "Turner's Outdoorsman", shopKey: 'turners' },
+  { email: 'RSimoneau@turners.com',             name: "Turner's Outdoorsman", shopKey: 'turners' },
   { email: 'accountspayable@turnersoutdoorsman.onmicrosoft.com', name: "Turner's Outdoorsman", shopKey: 'turners' },
+  // Fishermans Access — Jacob. Always identical subject, .xlsx attachment.
   { email: 'jacobvlastnik@yahoo.com',           name: 'Fishermans Access',    shopKey: 'fish'    },
+  // Johnny's Sport Shop — Warren. "Purchase Order: Johnny's Sport Shop" or reply with .xlsx.
   { email: 'johnnyssportshop1@gmail.com',       name: "Johnny's Sport Shop",  shopKey: 'johnnys' },
+  // Performance Tackle — Marc.
   { email: 'marc@performancetackle.com',        name: 'Performance Tackle',   shopKey: 'perf'    },
+  // Angler's Choice — POs come from Lightspeed (noreply@), follow-ups from sales@/accounting@.
   { email: 'sales@anglerschoicetackle.com',     name: "Angler's Choice",      shopKey: 'anglers' },
   { email: 'accounting@anglerschoicetackle.com',name: "Angler's Choice",      shopKey: 'anglers' },
+  // Melton Tackle — Jeff Peck (always). "Purchase Order PO##### for VIKINGHEADS".
   { email: 'jeff@meltontackle.com',             name: 'Melton Tackle',        shopKey: 'melton'  },
   { email: 'elliotc@meltontackle.com',          name: 'Melton Tackle',        shopKey: 'melton'  },
+  // Lightspeed POS — shared by Angler's Choice + The Longfin. Shop name is in the subject.
   { email: 'noreply@lightspeedhq.com',          name: 'Lightspeed POS',       shopKey: 'lightspeed' },
+  // BigFish Bait — always replies to "Re: Updates and price list" thread with .xlsx attachment.
   { email: 'sbbigfish@gmail.com',               name: 'BigFish Bait',         shopKey: 'bigfish' },
-  { email: 'tacklecaveusa@gmail.com',            name: 'TackleCave',           shopKey: 'tacklecave' },
-  { email: 'dean@thelongfin.com',                name: 'The Longfin',          shopKey: 'longfin' },
-  { email: 'tackle@hmlanding.com',               name: 'H&M Landing',          shopKey: 'hmlanding' },
+  // TackleCave — inline text orders, NO attachments. "New Order" subject.
+  { email: 'tacklecaveusa@gmail.com',           name: 'TackleCave',           shopKey: 'tacklecave' },
+  // The Longfin — Dean Plant. Direct emails + Lightspeed POS separately.
+  { email: 'dean@thelongfin.com',               name: 'The Longfin',          shopKey: 'longfin' },
+  // Chaeil Fishing / Blacktail Hooks — DUAL ROLE: supplier (hooks) AND customer (orders VK products).
+  { email: 'cftusainc@gmail.com',               name: 'Chaeil Fishing',       shopKey: 'chaeil'  },
+  // H&M Landing — potential new customer (via Cast and Crank Podcast intro).
+  { email: 'tackle@hmlanding.com',              name: 'H&M Landing',          shopKey: 'hmlanding' },
+  // Pacific Coast Bait & Tackle — new lead, asked for price list Mar 2026.
+  { email: 'wjbailey@hotmail.com',              name: 'Pacific Coast B&T',    shopKey: 'pcbt'    },
+  // Tyler Wrap Company — Bobby Conley, interested in vending machines.
+  { email: 'bobby@tylerwrapcompany.com',        name: 'Tyler Wrap Co',        shopKey: 'tylerwrap' },
+];
+
+// ── Supplier domains — NEVER show as importable orders ───────────────────────
+// These are companies Viking Heads BUYS from. Their "ORDER SHIPPED" / "ORDER
+// CONFIRMATION" / "INVOICE" emails are NOT customer purchase orders.
+const SUPPLIER_DOMAINS = [
+  'worthco.com',            // Worth Company — split rings, hook eyes
+  'mustad-americas.com',    // Mustad — hooks
+  'sent-via.netsuite.com',  // Owner Hooks (via NetSuite)
+  'picassolures.com',       // Picasso Lures
+  'colortechmfg.com',       // ColorTech — paint/powder coating
+  'packagetop.com',         // Lydia — bag packaging
+  'dbpackaging.com',        // DB Packaging — clamshells
+  'pakfactory.com',         // PakFactory — packaging
+  'interplas.com',          // Interplas — resin supplier
+  'vaporhoningtechnologies.com', // Vapor honing equipment
 ];
 
 // ── Per-shop deterministic classification ────────────────────────────────────
@@ -5008,100 +5043,192 @@ const KNOWN_SHOPS = [
 // Rules derived from observed email patterns across all shops.
 function _shopClassify(shopKey, subject, snippet, attachments) {
   const snip    = (snippet || '').toLowerCase();
+  const subj    = (subject || '').trim();
   const attStr  = attachments.map(a => a.name.toLowerCase()).join(' ');
 
   switch (shopKey) {
 
+    // ── FISHERMANS ACCESS ──────────────────────────────────────────────────
+    // Jacob ALWAYS uses identical subject: "FISHERMANS ACCESS ORDER"
+    // Occasional typo: "fishermans acces order" (one s). Always has .xlsx.
     case 'fish':
-      // Jacob always uses subject "FISHERMANS ACCESS ORDER" (occasional typos tolerated)
-      return /fishermans?\s+acces+\s+order/i.test(subject)
-        ? { isOrder: true,  reason: 'Fishermans Access order' }
-        : { isOrder: false, reason: 'Not an order subject' };
+      if (/fishermans?\s+acces+\s+order/i.test(subj))
+        return { isOrder: true, reason: 'Fishermans Access order' };
+      // His "thanks nick!" replies should not import
+      return { isOrder: false, reason: 'Not an FA order subject' };
 
+    // ── TURNER'S OUTDOORSMAN ───────────────────────────────────────────────
+    // 5 people email. Evelyn sends POs: "Po 245293 Vikingheads"
+    // Kyle sends: "viking heads order.xlsx", "Viking heads show order",
+    //             "viking heads fill in order.xlsx", "FW: Po 241584 Vikingheads"
+    // Kyle also says "Evelyn can you build the attached PO" in body.
+    // Evelyn says "Can you please process this order" in body.
+    // Renee + AP = invoicing only, never orders.
     case 'turners':
-      // Evelyn's POs: "Po 245293 Vikingheads" or "Po 245043 Vikingheads"
-      // Kyle's orders: subject contains "viking heads" + "order", or just "viking heads" with attachment
-      // Also catches "Viking heads show order" and "viking heads order.xlsx"
-      if (/\bpo\s+\d+\b/i.test(subject) && /viking/i.test(subject) && !/invoice|price.?list|re:|fw:/i.test(subject))
-        return { isOrder: true,  reason: "Turner's PO subject" };
-      if (/viking.?heads/i.test(subject) && /\border\b/i.test(subject) && !/invoice|price.?list/i.test(subject))
-        return { isOrder: true,  reason: "Turner's order subject" };
+      // Evelyn's format: "Po XXXXXX Vikingheads" (no RE/FW prefix)
+      if (/^\s*Po\s+\d+\s+viking/i.test(subj))
+        return { isOrder: true, reason: "Turner's PO (Evelyn)" };
+      // Kyle's format: subject has "viking heads" + "order" (not invoice/price list)
+      if (/viking.?head/i.test(subj) && /\border\b/i.test(subj) && !/invoice|price.?list/i.test(subj))
+        return { isOrder: true, reason: "Turner's order (Kyle)" };
+      // Kyle forwarding: "FW: Po 241584 Vikingheads"
+      if (/^fw:\s*po\s+\d+\s+viking/i.test(subj))
+        return { isOrder: true, reason: "Turner's FW PO (Kyle)" };
+      // Body signals from Kyle/Evelyn
       if (/evelyn.{0,40}(build|process).{0,40}(po|order)/i.test(snip))
-        return { isOrder: true,  reason: "Turner's PO build request" };
+        return { isOrder: true, reason: "Turner's PO build request" };
       if (/can you please process this order/i.test(snip))
-        return { isOrder: true,  reason: "Turner's process request" };
-      return { isOrder: false, reason: 'Not a Turner\'s order' };
+        return { isOrder: true, reason: "Turner's process request" };
+      // Everything else from Turner's (invoice follow-ups, AP emails, replies) = not orders
+      return { isOrder: false, reason: 'Turner\'s non-order' };
 
+    // ── TACKLE WAREHOUSE ───────────────────────────────────────────────────
+    // Doug's format: "Tackle Warehouse PO #XXXXXX" or "TW POs #XXXXX & #XXXXX"
+    // Orders are URL links to tacklewarehouse.com/po.html — NO attachment.
+    // Also: "Tackle Warehouse POs #190800 & #190801" (plural)
     case 'tw': {
-      // Doug's orders always have subject "Tackle Warehouse PO #XXXXX" or "TW POs …"
-      if (!/tackle\s+warehouse\s+po\s*#|^tw\s+pos?\b|tw\s+opening\s+orders/i.test(subject))
-        return { isOrder: false, reason: 'Not a TW order subject' };
-      // Extract portal URLs from the snippet (may be truncated; catches most cases)
+      if (!/tackle\s+warehouse\s+po|^tw\s+pos?\b|tw\s+opening\s+orders/i.test(subj))
+        return { isOrder: false, reason: 'Not a TW PO subject' };
       const twUrls = [];
-      const urlRe  = /https?:\/\/www\.tacklewarehouse\.com\/po\.html\?[^\s"<&]+(?:&[^\s"<]+)*/g;
+      const urlRe = /https?:\/\/www\.tacklewarehouse\.com\/po\.html\?[^\s"<)]+/g;
       let m;
       while ((m = urlRe.exec(snippet)) !== null) twUrls.push(m[0]);
       return { isOrder: true, reason: 'Tackle Warehouse PO', isTW: true, twUrls };
     }
 
+    // ── JOHNNY'S SPORT SHOP ────────────────────────────────────────────────
+    // Warren: "Purchase Order: Johnny's Sport Shop" for new threads.
+    // Reply threads: "order attached below", "small order attached", "another one attached".
+    // Also sent order inside a mailed check — "purchase order inside of it".
+    // Complaint email: "Johnny's Sport Shop" (no "order") — NOT an order.
     case 'johnnys':
-      // Warren uses "Purchase Order: Johnny's Sport Shop" for fresh threads.
-      // For reply threads he always writes "order attached below" / "small order attached".
-      if (/purchase\s+order/i.test(subject))
-        return { isOrder: true,  reason: "Johnny's PO subject" };
-      if (/order\s+attached|attached.*order|small\s+order/i.test(snip))
-        return { isOrder: true,  reason: 'Order attached in body' };
-      return { isOrder: false, reason: 'No order signal' };
+      if (/purchase\s+order/i.test(subj))
+        return { isOrder: true, reason: "Johnny's PO subject" };
+      if (/order\s+attached|attached.*order|small\s+order|another\s+one\s+attached/i.test(snip))
+        return { isOrder: true, reason: "Johnny's order in body" };
+      // If subject is just "Johnny's Sport Shop" with no order signal, check for complaints
+      if (/discrepanc|missing|unpackaged/i.test(snip))
+        return { isOrder: false, reason: 'Complaint, not order' };
+      return null; // Fall through to AI
 
+    // ── REEL ADDICTION ─────────────────────────────────────────────────────
+    // Aaron Jeffrey. First order came as "Re: 2026 Price-list" (reply to price list!)
+    // Body: "Attached is our first order". Filename: "Reel Addiction Order X.xlsx"
+    // Subject will NEVER say "order" — must check body + filename.
     case 'reel':
-      // Aaron names his file "Reel Addiction Order X.xlsx", or body says "Attached is our … order"
       if (/order/i.test(attStr))
-        return { isOrder: true,  reason: 'Order in filename' };
-      if (/attached is our|attached.*first order|attached.*order/i.test(snip))
-        return { isOrder: true,  reason: 'Order attached in body' };
+        return { isOrder: true, reason: 'Order in filename' };
+      if (/attached\s+(is\s+)?our|attached.{0,30}order|here.{0,20}order/i.test(snip))
+        return { isOrder: true, reason: 'Order in body text' };
+      // Price list requests, general questions = not orders
       return { isOrder: false, reason: 'No order signal' };
 
+    // ── MELTON TACKLE ──────────────────────────────────────────────────────
+    // Jeff Peck (always). VERY consistent format:
+    // "Purchase Order PO95526  for VIKINGHEADS" (double space before "for")
+    // Always has PDF attachment. Reply "RE: Purchase Order PO96039 for VIKINGHEADS" = NOT new order.
     case 'melton':
-      // Jeff Peck sends "Purchase Order PO##### for VIKINGHEADS"
-      if (/purchase\s+order\s+po\d+/i.test(subject))
-        return { isOrder: true,  reason: 'Melton Tackle PO' };
+      if (/^purchase\s+order\s+po\d+/i.test(subj))
+        return { isOrder: true, reason: 'Melton Tackle PO' };
+      // RE:/FW: versions are follow-ups, not new orders
+      if (/^(re|fw):\s*purchase\s+order\s+po\d+/i.test(subj))
+        return { isOrder: false, reason: 'Melton follow-up' };
       return { isOrder: false, reason: 'Not a Melton PO' };
 
+    // ── LIGHTSPEED POS (Angler's Choice + The Longfin) ─────────────────────
+    // Shared noreply@lightspeedhq.com. Shop name is ALWAYS in the subject:
+    // "Anglers Choice Purchase Order #6051"
+    // "The Longfin Fishing Tackle Purchase Order #234"
+    // Always has PDF attachment. Every email with this format IS an order.
     case 'lightspeed': {
-      // Lightspeed POS sends for multiple shops: "Anglers Choice Purchase Order #XXXX",
-      // "The Longfin Fishing Tackle Purchase Order #XXX", etc.
-      const lsMatch = subject.match(/^(.+?)\s+Purchase\s+Order\s+#\d+/i);
-      if (lsMatch) return { isOrder: true,  reason: `${lsMatch[1].trim()} PO via Lightspeed` };
+      const lsMatch = subj.match(/^(.+?)\s+Purchase\s+Order\s+#(\d+)/i);
+      if (lsMatch) return { isOrder: true, reason: `${lsMatch[1].trim()} PO #${lsMatch[2]}` };
       return { isOrder: false, reason: 'Not a Lightspeed PO' };
     }
 
+    // ── BIGFISH BAIT ───────────────────────────────────────────────────────
+    // ALWAYS replies to "Re: Updates and price list for 2026" thread.
+    // Subject NEVER says "order". Must detect from body:
+    // "Ok here is another order since it takes a while to get it"
+    // "I would like to place a new order"
+    // Also check for .xlsx attachment in the reply (they attach the order file).
     case 'bigfish':
-      // BigFish Bait — orders via subject or body text ("here is another order", attachment with order)
-      if (/order|po\b/i.test(subject) || /order|po\b/i.test(attStr))
-        return { isOrder: true,  reason: 'BigFish Bait order' };
-      if (/here is another order|place a new order|here.{0,20}order/i.test(snip))
-        return { isOrder: true,  reason: 'BigFish order in body' };
-      return null; // Fall through to AI for ambiguous emails
+      if (/order/i.test(attStr))
+        return { isOrder: true, reason: 'BigFish order file' };
+      if (/here is another order|place a new order|here.{0,30}order|another order/i.test(snip))
+        return { isOrder: true, reason: 'BigFish order in body' };
+      if (/check.*status|eta for the order|send.*payment|zelle|check went out/i.test(snip))
+        return { isOrder: false, reason: 'BigFish follow-up' };
+      // Has xlsx attachment but no order signal? Might be the order spreadsheet.
+      if (attachments.length && /\.xlsx?$/i.test(attStr))
+        return { isOrder: true, reason: 'BigFish xlsx attachment' };
+      return { isOrder: false, reason: 'BigFish non-order' };
 
+    // ── TACKLECAVE ─────────────────────────────────────────────────────────
+    // Inline text orders — NO attachments. Subject: "New Order" or "New Order 3/20".
+    // Body lists items: "3/8oz Swing Heads Gold dust - 20  Bait fish - 20"
+    // Also: "can we please make another one for the items below?"
+    // Reply "Re: New Order" is follow-up scheduling, not a new order.
     case 'tacklecave':
-      // TackleCave — orders have "order" or "PO" in subject, or body text with items
-      if (/\border\b|po\b/i.test(subject) && !/re:/i.test(subject))
-        return { isOrder: true,  reason: 'TackleCave order' };
-      if (/can we.*make another.*order|please.*order.*items below/i.test(snip))
-        return { isOrder: true,  reason: 'TackleCave order in body' };
+      if (/^new\s+order/i.test(subj))
+        return { isOrder: true, reason: 'TackleCave new order' };
+      if (/can we.*make another|place another order|items below/i.test(snip))
+        return { isOrder: true, reason: 'TackleCave order in body' };
+      if (/^re:\s*new\s+order/i.test(subj))
+        return { isOrder: false, reason: 'TackleCave reply' };
       return null; // Fall through to AI
 
+    // ── THE LONGFIN (Dean Plant direct) ────────────────────────────────────
+    // Dean emails directly in addition to Lightspeed POS.
+    // Subjects: "Longfin Purchase Order #131", "Longfin Tackle Order"
+    // Follow-ups: "Re: The Longfin Fishing Tackle Purchase Order #234" = NOT new order
+    // "Free Freight, THANK YOU" = definitely not an order
     case 'longfin':
-      // Dean from The Longfin — direct emails (POs come via Lightspeed separately)
-      if (/order|po\b|purchase/i.test(subject) && !/invoice|thank|free freight/i.test(subject))
-        return { isOrder: true,  reason: 'Longfin direct order' };
+      if (/^longfin.{0,20}(purchase\s+order|order)/i.test(subj))
+        return { isOrder: true, reason: 'Longfin direct order' };
+      if (/^re:/i.test(subj))
+        return { isOrder: false, reason: 'Longfin reply' };
+      return { isOrder: false, reason: 'Longfin non-order' };
+
+    // ── CHAEIL FISHING / BLACKTAIL HOOKS ───────────────────────────────────
+    // DUAL ROLE: they sell hooks TO Viking Heads, but also ORDER VK products.
+    // Customer orders: "PO#60217 Viking Head Order" — body lists VK products.
+    // Supplier invoices: "Your Invoice#21842 from Chaeil Fishing" — NOT an order.
+    // Price lists: "2026 New Blacktail Price List" — NOT an order.
+    // Reply "Re: Hook order" — this is VK ordering hooks FROM Chaeil, NOT a customer order.
+    case 'chaeil':
+      if (/viking\s*head.{0,10}order/i.test(subj))
+        return { isOrder: true, reason: 'Chaeil ordering VK products' };
+      if (/invoice|price\s*list|past\s*due|hook\s*order/i.test(subj))
+        return { isOrder: false, reason: 'Chaeil supplier email' };
+      return { isOrder: false, reason: 'Chaeil non-order' };
+
+    // ── ANGLER'S CHOICE (direct emails, not Lightspeed) ────────────────────
+    // POs come via Lightspeed. Direct emails from sales@ are follow-ups/complaints.
+    // "Re: Anglers Choice Purchase Order #5938" — color complaint, NOT new order.
+    case 'anglers':
+      if (/purchase\s+order/i.test(subj) && !/^re:|^fw:/i.test(subj))
+        return { isOrder: true, reason: "Angler's Choice PO" };
+      return { isOrder: false, reason: "Angler's follow-up" };
+
+    // ── PERFORMANCE TACKLE ─────────────────────────────────────────────────
+    // Marc. Mostly invoice follow-ups seen. Let AI handle if unclear.
+    case 'perf':
+      if (/order|po\b|purchase/i.test(subj) && !/invoice|re:|fw:/i.test(subj))
+        return { isOrder: true, reason: 'Performance Tackle order' };
+      if (/invoice/i.test(subj))
+        return { isOrder: false, reason: 'Invoice, not order' };
       return null; // Fall through to AI
 
+    // ── NEW / SMALL SHOPS — generic rules ──────────────────────────────────
     case 'hmlanding':
-      // H&M Landing — new potential customer
-      if (/order|po\b|purchase/i.test(subject))
-        return { isOrder: true,  reason: 'H&M Landing order' };
-      return null;
+    case 'pcbt':
+    case 'tylerwrap':
+      if (/order|po\b|purchase/i.test(subj) && !/invoice|re:|fw:/i.test(subj))
+        return { isOrder: true, reason: `${shopKey} order` };
+      if (/price\s*list|get\s*(you\s+)?an\s+order/i.test(snip))
+        return { isOrder: false, reason: 'Inquiry, not order yet' };
+      return null; // Fall through to AI
 
     default:
       return null; // Unknown shop → AI screener decides
@@ -5129,9 +5256,10 @@ function openGmailPull() {
 
 // AI batch-screening: sends all email subjects + snippets to Claude in ONE call.
 // Mutates each row's isSuspect, aiReason, and aiScreened fields in place.
+// OPTIONAL — if no API key is stored, silently skips (never prompts the user).
 async function _aiScreenEmails(rows) {
-  const ANTHROPIC_API_KEY = getAnthropicKey();
-  if (!ANTHROPIC_API_KEY) return; // fall back to keyword-only flags
+  const ANTHROPIC_API_KEY = localStorage.getItem('anthropic_api_key');
+  if (!ANTHROPIC_API_KEY) return; // no key stored → skip AI, use rule-based flags only
 
   const emailList = rows.map((r, i) => {
     const fileNames = r.attachments.map(a => a.name).join(', ');
@@ -5208,19 +5336,21 @@ async function _showGmailModal() {
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
   // Three parallel queries:
-  //  Q1 — known shops with attachments (covers most orders)
-  //  Q2 — TW-specific without attachment requirement (TW orders are often URL-only)
-  //  Q3 — broad catch-all: any email with attachments + order-like keywords (catches new/unknown shops)
+  //  Q1 — ALL known shops (with OR without attachments — TackleCave sends inline text orders)
+  //  Q2 — TW-specific (orders are always URL-only, never attachments)
+  //  Q3 — broad catch-all for unknown shops (attachment + order-like subject, minus suppliers)
   const twShops      = KNOWN_SHOPS.filter(s => s.shopKey === 'tw');
   const fromAll      = KNOWN_SHOPS.map(s => `from:${s.email}`).join(' OR ');
   const fromTw       = twShops.map(s => `from:${s.email}`).join(' OR ');
-  const q1 = encodeURIComponent(`has:attachment (${fromAll})`);
+  // Q3: exclude known supplier domains so Worth Co "ORDER SHIPPED" etc. don't pollute results
+  const supplierExclude = SUPPLIER_DOMAINS.map(d => `-from:${d}`).join(' ');
+  const q1 = encodeURIComponent(`(${fromAll})`);
   const q2 = encodeURIComponent(`(${fromTw}) subject:"Tackle Warehouse PO"`);
-  const q3 = encodeURIComponent(`has:attachment {subject:order subject:PO subject:"purchase order"} -label:sent`);
+  const q3 = encodeURIComponent(`has:attachment {subject:order subject:PO subject:"purchase order"} -label:sent ${supplierExclude}`);
 
   try {
     const [res1, res2, res3] = await Promise.all([
-      fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${q1}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
+      fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=30&q=${q1}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
       fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${q2}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
       fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=${q3}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
     ]);
@@ -5277,8 +5407,12 @@ async function _showGmailModal() {
         const allParts    = msg.payload?.parts || (msg.payload ? [msg.payload] : []);
         const attachments = findAttachmentParts(allParts, msg.id);
 
-        // Known shops and TW emails are valid even without importable attachments
-        // (TW orders are URL-only; some shops send orders inline in email body)
+        // Block supplier emails — they are NEVER customer orders
+        const fromDomain = fromEmail.split('@')[1] || '';
+        if (SUPPLIER_DOMAINS.some(d => fromDomain === d || fromDomain.endsWith('.' + d))) return null;
+
+        // Known shops are valid even without attachments (TackleCave = inline text, TW = URL)
+        // Unknown senders without attachments get dropped (nothing to import)
         if (!attachments.length && !shopEntry) return null;
 
         // Run per-shop deterministic classifier
@@ -5311,7 +5445,7 @@ async function _showGmailModal() {
 
     if (!rows.length) {
       document.getElementById('gmail-modal-body').innerHTML =
-        '<div class="muted">Found emails but no XLSX/CSV/image attachments.</div>';
+        '<div class="muted">No order-like emails found. Supplier emails are automatically filtered out.</div>';
       return;
     }
 
