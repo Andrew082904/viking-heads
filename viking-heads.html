@@ -1274,7 +1274,9 @@ function applyMigrations(d) {
     d._seededLongfinPO234 = true;
   }
   // Migration: seed Melton Tackle PO96039 pg1 (03/23/26) — no VK rigs
-  if (!d._seededMeltonPO96039v2) {
+  if (!d._seededMeltonPO96039v3) {
+    // Delete old v2 if it exists
+    d.orders = d.orders.filter(o => o.id !== 'melton_po96039_v2');
     const melton2Items = [
       { sku:'VKS14CMDO',    qty:18 }, { sku:'VKS14MT',       qty:6  },
       { sku:'VKS14RED',     qty:18 }, { sku:'VKS14BB',       qty:18 },
@@ -1282,9 +1284,11 @@ function applyMigrations(d) {
       { sku:'VKS38CMDO',    qty:18 }, { sku:'VKS38BF',       qty:6  },
       { sku:'VKS34CMDO',    qty:12 }, { sku:'VKS34BB',       qty:6  },
       { sku:'VKS34GD',      qty:6  }, { sku:'VKS1BB',        qty:6  },
-      { sku:'VFH31620CMDO', qty:6  }, { sku:'VFH31620GBF',   qty:6  },
-      { sku:'VFH31620BBF',  qty:12 }, { sku:'VFH31630GBF',   qty:6  },
-      { sku:'VFH1420CMDO',  qty:6  }, { sku:'VFH1420PBF',    qty:6  },
+      { sku:'VFH31620SH',   qty:6  }, { sku:'VFH31620GBF',   qty:6  },
+      { sku:'VFH31620BBF',  qty:12 }, { sku:'VFH31620CMDO',  qty:6  },
+      { sku:'VFH31630GBF',  qty:6  },
+      { sku:'VFH1420SH',    qty:6  }, { sku:'VFH1420CMDO',   qty:6  },
+      { sku:'VFH1420PBF',   qty:6  },
       { sku:'VFH01430BBF',  qty:6  }, { sku:'VFH1430PBF',    qty:6  },
     ].map(({ sku, qty }) => {
       const def = SKU_TABLE[sku];
@@ -1298,16 +1302,16 @@ function applyMigrations(d) {
       };
     }).filter(Boolean);
     d.orders.unshift({
-      id: 'melton_po96039_v2',
+      id: 'melton_po96039_v3',
       shop: 'Melton Tackle',
       dueDate: '2026-04-14',
-      notes: 'PO96039 pg1 — Shad mapped to Commando, no VK rigs — page 2 pending',
+      notes: 'PO96039 pg1 — no VK rigs — page 2 pending',
       createdAt: '2026-03-23T00:00:00.000Z',
       status: 'pending',
       archived: false,
       items: melton2Items,
     });
-    d._seededMeltonPO96039v2 = true;
+    d._seededMeltonPO96039v3 = true;
   }
   // Migration: recalculate order item components using bags→heads conversion
   if (!d._migratedBagComponents) {
