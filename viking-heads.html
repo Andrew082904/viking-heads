@@ -1290,9 +1290,6 @@ function applyMigrations(d) {
       { sku:'VFH1420SH',    qty:6  }, { sku:'VFH1420CMDO',   qty:6  },
       { sku:'VFH1420PBF',   qty:6  },
       { sku:'VFH01430BBF',  qty:6  }, { sku:'VFH1430PBF',    qty:6  },
-      { sku:'VKRBJ',        qty:6  }, { sku:'VKRBBDE',       qty:6  },
-      { sku:'VKRBF',        qty:6  }, { sku:'VKRBB',         qty:6  },
-      { sku:'VKRPTS',       qty:6  },
     ].map(({ sku, qty }) => {
       const def = SKU_TABLE[sku];
       if (!def) return null;
