@@ -8,7 +8,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- Google Translate: define callback BEFORE loading the script, init after DOM ready -->
   <script type="text/javascript">
     function googleTranslateElementInit() {
@@ -830,7 +829,7 @@
   <div class="page-header">
     <div class="page-title">Import</div>
     <button class="btn" onclick="triggerOrderImport()">Import File / Image</button>
-    <button class="btn btn-gold" onclick="openGmailPull()" id="gmail-pull-btn">📧 Pull from Gmail</button>
+    <button class="btn btn-gold" onclick="openClaudeProcess()">🤖 Process with Claude</button>
     <button class="btn" onclick="toggleSkuReference()">SKU Reference</button>
     <button class="btn" onclick="showReorderList()">🛒 Reorder List</button>
     <button class="btn" onclick="exportOrdersCsv()">⬇ Export CSV</button>
@@ -4986,620 +4985,302 @@ async function startWithAuthGate() {
 }
 
 // ============================================================
-// GMAIL PULL — OAuth + attachment import
+// PROCESS WITH CLAUDE — parse orders from text/files using Opus
 // ============================================================
 
-const GMAIL_CLIENT_ID = '724553436284-s8s1u9h80pgmsoiqp08vpj06a3lmj0d9.apps.googleusercontent.com';
-const GMAIL_SCOPE     = 'https://www.googleapis.com/auth/gmail.readonly';
-
-// ── Customer shops — emails that may contain purchase orders ──────────────────
-// shopKey drives per-shop deterministic classification rules in _shopClassify().
-const KNOWN_SHOPS = [
-  // Reel Addiction — Aaron Jeffrey. Orders as reply threads with .xlsx attachment.
-  { email: 'fearnofish86@gmail.com',            name: 'Reel Addiction',       shopKey: 'reel'    },
-  // Tackle Warehouse — Doug/Jessi. Orders via URL links, no attachment.
-  { email: 'doug.horvath@tacklewarehouse.com',  name: 'Tackle Warehouse',     shopKey: 'tw'      },
-  { email: 'jessi.grant@tacklewarehouse.com',   name: 'Tackle Warehouse',     shopKey: 'tw'      },
-  // Turner's Outdoorsman — Kyle (PO files), Evelyn (processes POs), Renee (AP), Diana (logistics).
-  { email: 'KTibbets@turners.com',              name: "Turner's Outdoorsman", shopKey: 'turners' },
-  { email: 'EKing@turners.com',                 name: "Turner's Outdoorsman", shopKey: 'turners' },
-  { email: 'DMontes@turners.com',               name: "Turner's Outdoorsman", shopKey: 'turners' },
-  { email: 'RSimoneau@turners.com',             name: "Turner's Outdoorsman", shopKey: 'turners' },
-  { email: 'accountspayable@turnersoutdoorsman.onmicrosoft.com', name: "Turner's Outdoorsman", shopKey: 'turners' },
-  // Fishermans Access — Jacob. Always identical subject, .xlsx attachment.
-  { email: 'jacobvlastnik@yahoo.com',           name: 'Fishermans Access',    shopKey: 'fish'    },
-  // Johnny's Sport Shop — Warren. "Purchase Order: Johnny's Sport Shop" or reply with .xlsx.
-  { email: 'johnnyssportshop1@gmail.com',       name: "Johnny's Sport Shop",  shopKey: 'johnnys' },
-  // Performance Tackle — Marc.
-  { email: 'marc@performancetackle.com',        name: 'Performance Tackle',   shopKey: 'perf'    },
-  // Angler's Choice — POs come from Lightspeed (noreply@), follow-ups from sales@/accounting@.
-  { email: 'sales@anglerschoicetackle.com',     name: "Angler's Choice",      shopKey: 'anglers' },
-  { email: 'accounting@anglerschoicetackle.com',name: "Angler's Choice",      shopKey: 'anglers' },
-  // Melton Tackle — Jeff Peck (always). "Purchase Order PO##### for VIKINGHEADS".
-  { email: 'jeff@meltontackle.com',             name: 'Melton Tackle',        shopKey: 'melton'  },
-  { email: 'elliotc@meltontackle.com',          name: 'Melton Tackle',        shopKey: 'melton'  },
-  // Lightspeed POS — shared by Angler's Choice + The Longfin. Shop name is in the subject.
-  { email: 'noreply@lightspeedhq.com',          name: 'Lightspeed POS',       shopKey: 'lightspeed' },
-  // BigFish Bait — always replies to "Re: Updates and price list" thread with .xlsx attachment.
-  { email: 'sbbigfish@gmail.com',               name: 'BigFish Bait',         shopKey: 'bigfish' },
-  // TackleCave — inline text orders, NO attachments. "New Order" subject.
-  { email: 'tacklecaveusa@gmail.com',           name: 'TackleCave',           shopKey: 'tacklecave' },
-  // The Longfin — Dean Plant. Direct emails + Lightspeed POS separately.
-  { email: 'dean@thelongfin.com',               name: 'The Longfin',          shopKey: 'longfin' },
-  // Chaeil Fishing / Blacktail Hooks — DUAL ROLE: supplier (hooks) AND customer (orders VK products).
-  { email: 'cftusainc@gmail.com',               name: 'Chaeil Fishing',       shopKey: 'chaeil'  },
-  // H&M Landing — potential new customer (via Cast and Crank Podcast intro).
-  { email: 'tackle@hmlanding.com',              name: 'H&M Landing',          shopKey: 'hmlanding' },
-  // Pacific Coast Bait & Tackle — new lead, asked for price list Mar 2026.
-  { email: 'wjbailey@hotmail.com',              name: 'Pacific Coast B&T',    shopKey: 'pcbt'    },
-  // Tyler Wrap Company — Bobby Conley, interested in vending machines.
-  { email: 'bobby@tylerwrapcompany.com',        name: 'Tyler Wrap Co',        shopKey: 'tylerwrap' },
+// Known customer shop names (for Claude's context when parsing orders)
+const KNOWN_SHOP_NAMES = [
+  'Reel Addiction', 'Tackle Warehouse', "Turner's Outdoorsman", 'Fishermans Access',
+  "Johnny's Sport Shop", 'Performance Tackle', "Angler's Choice", 'Melton Tackle',
+  'BigFish Bait', 'TackleCave', 'The Longfin', 'Chaeil Fishing', 'H&M Landing',
+  'Pacific Coast B&T', 'Tyler Wrap Co',
 ];
 
-// ── Supplier domains — NEVER show as importable orders ───────────────────────
-// These are companies Viking Heads BUYS from. Their "ORDER SHIPPED" / "ORDER
-// CONFIRMATION" / "INVOICE" emails are NOT customer purchase orders.
-const SUPPLIER_DOMAINS = [
-  'worthco.com',            // Worth Company — split rings, hook eyes
-  'mustad-americas.com',    // Mustad — hooks
-  'sent-via.netsuite.com',  // Owner Hooks (via NetSuite)
-  'picassolures.com',       // Picasso Lures
-  'colortechmfg.com',       // ColorTech — paint/powder coating
-  'packagetop.com',         // Lydia — bag packaging
-  'dbpackaging.com',        // DB Packaging — clamshells
-  'pakfactory.com',         // PakFactory — packaging
-  'interplas.com',          // Interplas — resin supplier
-  'vaporhoningtechnologies.com', // Vapor honing equipment
-];
 
-// ── Per-shop deterministic classification ────────────────────────────────────
-// Returns { isOrder, reason, isTW?, twUrls? } or null (→ falls through to AI).
-// Rules derived from observed email patterns across all shops.
-function _shopClassify(shopKey, subject, snippet, attachments) {
-  const snip    = (snippet || '').toLowerCase();
-  const subj    = (subject || '').trim();
-  const attStr  = attachments.map(a => a.name.toLowerCase()).join(' ');
-
-  switch (shopKey) {
-
-    // ── FISHERMANS ACCESS ──────────────────────────────────────────────────
-    // Jacob ALWAYS uses identical subject: "FISHERMANS ACCESS ORDER"
-    // Occasional typo: "fishermans acces order" (one s). Always has .xlsx.
-    case 'fish':
-      if (/fishermans?\s+acces+\s+order/i.test(subj))
-        return { isOrder: true, reason: 'Fishermans Access order' };
-      // His "thanks nick!" replies should not import
-      return { isOrder: false, reason: 'Not an FA order subject' };
-
-    // ── TURNER'S OUTDOORSMAN ───────────────────────────────────────────────
-    // 5 people email. Evelyn sends POs: "Po 245293 Vikingheads"
-    // Kyle sends: "viking heads order.xlsx", "Viking heads show order",
-    //             "viking heads fill in order.xlsx", "FW: Po 241584 Vikingheads"
-    // Kyle also says "Evelyn can you build the attached PO" in body.
-    // Evelyn says "Can you please process this order" in body.
-    // Renee + AP = invoicing only, never orders.
-    case 'turners':
-      // Evelyn's format: "Po XXXXXX Vikingheads" (no RE/FW prefix)
-      if (/^\s*Po\s+\d+\s+viking/i.test(subj))
-        return { isOrder: true, reason: "Turner's PO (Evelyn)" };
-      // Kyle's format: subject has "viking heads" + "order" (not invoice/price list)
-      if (/viking.?head/i.test(subj) && /\border\b/i.test(subj) && !/invoice|price.?list/i.test(subj))
-        return { isOrder: true, reason: "Turner's order (Kyle)" };
-      // Kyle forwarding: "FW: Po 241584 Vikingheads"
-      if (/^fw:\s*po\s+\d+\s+viking/i.test(subj))
-        return { isOrder: true, reason: "Turner's FW PO (Kyle)" };
-      // Body signals from Kyle/Evelyn
-      if (/evelyn.{0,40}(build|process).{0,40}(po|order)/i.test(snip))
-        return { isOrder: true, reason: "Turner's PO build request" };
-      if (/can you please process this order/i.test(snip))
-        return { isOrder: true, reason: "Turner's process request" };
-      // Everything else from Turner's (invoice follow-ups, AP emails, replies) = not orders
-      return { isOrder: false, reason: 'Turner\'s non-order' };
-
-    // ── TACKLE WAREHOUSE ───────────────────────────────────────────────────
-    // Doug's format: "Tackle Warehouse PO #XXXXXX" or "TW POs #XXXXX & #XXXXX"
-    // Orders are URL links to tacklewarehouse.com/po.html — NO attachment.
-    // Also: "Tackle Warehouse POs #190800 & #190801" (plural)
-    case 'tw': {
-      if (!/tackle\s+warehouse\s+po|^tw\s+pos?\b|tw\s+opening\s+orders/i.test(subj))
-        return { isOrder: false, reason: 'Not a TW PO subject' };
-      const twUrls = [];
-      const urlRe = /https?:\/\/www\.tacklewarehouse\.com\/po\.html\?[^\s"<)]+/g;
-      let m;
-      while ((m = urlRe.exec(snippet)) !== null) twUrls.push(m[0]);
-      return { isOrder: true, reason: 'Tackle Warehouse PO', isTW: true, twUrls };
-    }
-
-    // ── JOHNNY'S SPORT SHOP ────────────────────────────────────────────────
-    // Warren: "Purchase Order: Johnny's Sport Shop" for new threads.
-    // Reply threads: "order attached below", "small order attached", "another one attached".
-    // Also sent order inside a mailed check — "purchase order inside of it".
-    // Complaint email: "Johnny's Sport Shop" (no "order") — NOT an order.
-    case 'johnnys':
-      if (/purchase\s+order/i.test(subj))
-        return { isOrder: true, reason: "Johnny's PO subject" };
-      if (/order\s+attached|attached.*order|small\s+order|another\s+one\s+attached/i.test(snip))
-        return { isOrder: true, reason: "Johnny's order in body" };
-      // If subject is just "Johnny's Sport Shop" with no order signal, check for complaints
-      if (/discrepanc|missing|unpackaged/i.test(snip))
-        return { isOrder: false, reason: 'Complaint, not order' };
-      return null; // Fall through to AI
-
-    // ── REEL ADDICTION ─────────────────────────────────────────────────────
-    // Aaron Jeffrey. First order came as "Re: 2026 Price-list" (reply to price list!)
-    // Body: "Attached is our first order". Filename: "Reel Addiction Order X.xlsx"
-    // Subject will NEVER say "order" — must check body + filename.
-    case 'reel':
-      if (/order/i.test(attStr))
-        return { isOrder: true, reason: 'Order in filename' };
-      if (/attached\s+(is\s+)?our|attached.{0,30}order|here.{0,20}order/i.test(snip))
-        return { isOrder: true, reason: 'Order in body text' };
-      // Price list requests, general questions = not orders
-      return { isOrder: false, reason: 'No order signal' };
-
-    // ── MELTON TACKLE ──────────────────────────────────────────────────────
-    // Jeff Peck (always). VERY consistent format:
-    // "Purchase Order PO95526  for VIKINGHEADS" (double space before "for")
-    // Always has PDF attachment. Reply "RE: Purchase Order PO96039 for VIKINGHEADS" = NOT new order.
-    case 'melton':
-      if (/^purchase\s+order\s+po\d+/i.test(subj))
-        return { isOrder: true, reason: 'Melton Tackle PO' };
-      // RE:/FW: versions are follow-ups, not new orders
-      if (/^(re|fw):\s*purchase\s+order\s+po\d+/i.test(subj))
-        return { isOrder: false, reason: 'Melton follow-up' };
-      return { isOrder: false, reason: 'Not a Melton PO' };
-
-    // ── LIGHTSPEED POS (Angler's Choice + The Longfin) ─────────────────────
-    // Shared noreply@lightspeedhq.com. Shop name is ALWAYS in the subject:
-    // "Anglers Choice Purchase Order #6051"
-    // "The Longfin Fishing Tackle Purchase Order #234"
-    // Always has PDF attachment. Every email with this format IS an order.
-    case 'lightspeed': {
-      const lsMatch = subj.match(/^(.+?)\s+Purchase\s+Order\s+#(\d+)/i);
-      if (lsMatch) return { isOrder: true, reason: `${lsMatch[1].trim()} PO #${lsMatch[2]}` };
-      return { isOrder: false, reason: 'Not a Lightspeed PO' };
-    }
-
-    // ── BIGFISH BAIT ───────────────────────────────────────────────────────
-    // ALWAYS replies to "Re: Updates and price list for 2026" thread.
-    // Subject NEVER says "order". Must detect from body:
-    // "Ok here is another order since it takes a while to get it"
-    // "I would like to place a new order"
-    // Also check for .xlsx attachment in the reply (they attach the order file).
-    case 'bigfish':
-      if (/order/i.test(attStr))
-        return { isOrder: true, reason: 'BigFish order file' };
-      if (/here is another order|place a new order|here.{0,30}order|another order/i.test(snip))
-        return { isOrder: true, reason: 'BigFish order in body' };
-      if (/check.*status|eta for the order|send.*payment|zelle|check went out/i.test(snip))
-        return { isOrder: false, reason: 'BigFish follow-up' };
-      // Has xlsx attachment but no order signal? Might be the order spreadsheet.
-      if (attachments.length && /\.xlsx?$/i.test(attStr))
-        return { isOrder: true, reason: 'BigFish xlsx attachment' };
-      return { isOrder: false, reason: 'BigFish non-order' };
-
-    // ── TACKLECAVE ─────────────────────────────────────────────────────────
-    // Inline text orders — NO attachments. Subject: "New Order" or "New Order 3/20".
-    // Body lists items: "3/8oz Swing Heads Gold dust - 20  Bait fish - 20"
-    // Also: "can we please make another one for the items below?"
-    // Reply "Re: New Order" is follow-up scheduling, not a new order.
-    case 'tacklecave':
-      if (/^new\s+order/i.test(subj))
-        return { isOrder: true, reason: 'TackleCave new order' };
-      if (/can we.*make another|place another order|items below/i.test(snip))
-        return { isOrder: true, reason: 'TackleCave order in body' };
-      if (/^re:\s*new\s+order/i.test(subj))
-        return { isOrder: false, reason: 'TackleCave reply' };
-      return null; // Fall through to AI
-
-    // ── THE LONGFIN (Dean Plant direct) ────────────────────────────────────
-    // Dean emails directly in addition to Lightspeed POS.
-    // Subjects: "Longfin Purchase Order #131", "Longfin Tackle Order"
-    // Follow-ups: "Re: The Longfin Fishing Tackle Purchase Order #234" = NOT new order
-    // "Free Freight, THANK YOU" = definitely not an order
-    case 'longfin':
-      if (/^longfin.{0,20}(purchase\s+order|order)/i.test(subj))
-        return { isOrder: true, reason: 'Longfin direct order' };
-      if (/^re:/i.test(subj))
-        return { isOrder: false, reason: 'Longfin reply' };
-      return { isOrder: false, reason: 'Longfin non-order' };
-
-    // ── CHAEIL FISHING / BLACKTAIL HOOKS ───────────────────────────────────
-    // DUAL ROLE: they sell hooks TO Viking Heads, but also ORDER VK products.
-    // Customer orders: "PO#60217 Viking Head Order" — body lists VK products.
-    // Supplier invoices: "Your Invoice#21842 from Chaeil Fishing" — NOT an order.
-    // Price lists: "2026 New Blacktail Price List" — NOT an order.
-    // Reply "Re: Hook order" — this is VK ordering hooks FROM Chaeil, NOT a customer order.
-    case 'chaeil':
-      if (/viking\s*head.{0,10}order/i.test(subj))
-        return { isOrder: true, reason: 'Chaeil ordering VK products' };
-      if (/invoice|price\s*list|past\s*due|hook\s*order/i.test(subj))
-        return { isOrder: false, reason: 'Chaeil supplier email' };
-      return { isOrder: false, reason: 'Chaeil non-order' };
-
-    // ── ANGLER'S CHOICE (direct emails, not Lightspeed) ────────────────────
-    // POs come via Lightspeed. Direct emails from sales@ are follow-ups/complaints.
-    // "Re: Anglers Choice Purchase Order #5938" — color complaint, NOT new order.
-    case 'anglers':
-      if (/purchase\s+order/i.test(subj) && !/^re:|^fw:/i.test(subj))
-        return { isOrder: true, reason: "Angler's Choice PO" };
-      return { isOrder: false, reason: "Angler's follow-up" };
-
-    // ── PERFORMANCE TACKLE ─────────────────────────────────────────────────
-    // Marc. Mostly invoice follow-ups seen. Let AI handle if unclear.
-    case 'perf':
-      if (/order|po\b|purchase/i.test(subj) && !/invoice|re:|fw:/i.test(subj))
-        return { isOrder: true, reason: 'Performance Tackle order' };
-      if (/invoice/i.test(subj))
-        return { isOrder: false, reason: 'Invoice, not order' };
-      return null; // Fall through to AI
-
-    // ── NEW / SMALL SHOPS — generic rules ──────────────────────────────────
-    case 'hmlanding':
-    case 'pcbt':
-    case 'tylerwrap':
-      if (/order|po\b|purchase/i.test(subj) && !/invoice|re:|fw:/i.test(subj))
-        return { isOrder: true, reason: `${shopKey} order` };
-      if (/price\s*list|get\s*(you\s+)?an\s+order/i.test(snip))
-        return { isOrder: false, reason: 'Inquiry, not order yet' };
-      return null; // Fall through to AI
-
-    default:
-      return null; // Unknown shop → AI screener decides
-  }
-}
-
-let _gmailToken = null;
-
-function openGmailPull() {
-  // If we already have a valid token, go straight to the inbox search
-  if (_gmailToken) { _showGmailModal(); return; }
-
-  // Trigger Google OAuth popup
-  const client = google.accounts.oauth2.initTokenClient({
-    client_id: GMAIL_CLIENT_ID,
-    scope:     GMAIL_SCOPE,
-    callback:  (resp) => {
-      if (resp.error) { showToast('Gmail auth failed: ' + resp.error, 'error'); return; }
-      _gmailToken = resp.access_token;
-      _showGmailModal();
-    },
-  });
-  client.requestAccessToken();
-}
-
-// AI batch-screening: sends all email subjects + snippets to Claude in ONE call.
-// Mutates each row's isSuspect, aiReason, and aiScreened fields in place.
-// OPTIONAL — if no API key is stored, silently skips (never prompts the user).
-async function _aiScreenEmails(rows) {
-  const ANTHROPIC_API_KEY = localStorage.getItem('anthropic_api_key');
-  if (!ANTHROPIC_API_KEY) return; // no key stored → skip AI, use rule-based flags only
-
-  const emailList = rows.map((r, i) => {
-    const fileNames = r.attachments.map(a => a.name).join(', ');
-    return `${i + 1}. Subject: "${r.subject}" | Files: "${fileNames}" | Preview: "${r.snippet.slice(0, 200)}"`;
+// Build SKU catalog string for Claude prompts
+function _buildSkuCatalog() {
+  return Object.entries(SKU_TABLE).map(([sku, info]) => {
+    const parts = [sku, info.productType, info.size];
+    if (info.hookSize) parts.push(`hook ${info.hookSize}`);
+    parts.push(info.color);
+    return parts.join(' | ');
   }).join('\n');
+}
+
+function openClaudeProcess() {
+  let modal = document.getElementById('claude-process-modal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'claude-process-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:#0e1f30;border:1px solid #1a3050;border-radius:6px;padding:24px;max-width:720px;width:100%;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <div class="page-title">🤖 Process Order with Claude</div>
+        <span style="flex:1"></span>
+        <button class="btn btn-sm" onclick="document.getElementById('claude-process-modal').remove()">✕ Close</button>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;margin-bottom:6px;color:#8aadcf;font-size:11px;letter-spacing:1px;text-transform:uppercase">Paste order text (email, text message, etc.)</label>
+        <textarea id="claude-order-text" rows="8" style="width:100%;background:#091a28;border:1px solid #1a3050;color:#c9d8e8;padding:10px;font-size:13px;border-radius:4px;resize:vertical" placeholder="Paste the order email, text message, or any order info here…"></textarea>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;margin-bottom:6px;color:#8aadcf;font-size:11px;letter-spacing:1px;text-transform:uppercase">Attach files (images, PDFs, spreadsheets)</label>
+        <input type="file" id="claude-order-files" multiple accept="image/*,.pdf,.xlsx,.xls,.csv,.txt" style="color:#5a7a9a;font-size:13px">
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button class="btn btn-gold" onclick="runClaudeProcess()" id="claude-process-btn">Process Order</button>
+        <span id="claude-process-status" style="font-size:12px;color:#5a7a9a"></span>
+      </div>
+      <div id="claude-process-result" style="margin-top:16px"></div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.getElementById('claude-order-text').focus();
+}
+
+async function runClaudeProcess() {
+  const text  = document.getElementById('claude-order-text').value.trim();
+  const files = Array.from(document.getElementById('claude-order-files').files || []);
+  if (!text && !files.length) {
+    showToast('Paste some order text or attach a file', 'error');
+    return;
+  }
+
+  const btn    = document.getElementById('claude-process-btn');
+  const status = document.getElementById('claude-process-status');
+  const result = document.getElementById('claude-process-result');
+  btn.disabled = true;
+  btn.textContent = 'Processing…';
+  status.textContent = 'Sending to Claude Opus…';
+  result.innerHTML = '';
+
+  const ANTHROPIC_API_KEY = getAnthropicKey();
+  if (!ANTHROPIC_API_KEY) {
+    btn.disabled = false; btn.textContent = 'Process Order'; status.textContent = '';
+    return;
+  }
 
   try {
+    const skuCatalog = _buildSkuCatalog();
+    const shopList   = KNOWN_SHOP_NAMES.join(', ');
+
+    // Build message content array
+    const content = [];
+
+    // Add file contents (images, PDFs as base64; spreadsheets as CSV text)
+    for (const file of files) {
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+        if (typeof XLSX !== 'undefined') {
+          const buffer = await file.arrayBuffer();
+          const wb     = XLSX.read(buffer, { type: 'array' });
+          const ws     = wb.Sheets[wb.SheetNames[0]];
+          const csv    = XLSX.utils.sheet_to_csv(ws);
+          content.push({ type: 'text', text: `[Spreadsheet: ${file.name}]\n${csv.slice(0, 12000)}` });
+        }
+      } else if (name.endsWith('.csv') || name.endsWith('.txt')) {
+        const fileText = await file.text();
+        content.push({ type: 'text', text: `[File: ${file.name}]\n${fileText.slice(0, 12000)}` });
+      } else if (file.type === 'application/pdf' || name.endsWith('.pdf')) {
+        const base64 = await fileToBase64(file);
+        content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } });
+      } else if (file.type.startsWith('image/')) {
+        const base64   = await fileToBase64(file);
+        const mimeType = ['image/jpeg','image/png','image/gif','image/webp'].includes(file.type) ? file.type : 'image/jpeg';
+        content.push({ type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } });
+      }
+    }
+
+    // Add the text prompt with all context
+    content.push({
+      type: 'text',
+      text: `You are an order processor for Viking Heads, a fishing jig manufacturer. Parse the order information provided and extract all details.
+
+PRODUCT TYPE PREFIXES — do NOT mix these up:
+- VKS = Swinghead (swinging-hook jig head)
+- VKH = VK Head (fixed-hook jig head — DIFFERENT from Swinghead)
+- VFH = Finesse Head
+- VKWGH = Weedguard Head
+
+SKU CATALOG (SKU | Product Type | Size | Hook | Color):
+${skuCatalog}
+
+KNOWN CUSTOMERS: ${shopList}
+
+ORDER INFORMATION:
+${text || '(See attached file(s))'}
+
+INSTRUCTIONS:
+1. Identify the shop/customer name. Match to a known customer if possible.
+2. Extract every order line item — match products to SKUs from the catalog.
+3. Fix minor typos, spacing issues, or partial SKU matches.
+4. If quantity is in packs/bags, use that number directly.
+5. Skip totals, notes, shipping rows, invoice headers.
+
+Return ONLY valid JSON — no other text:
+{"shop":"Shop Name","notes":"any relevant notes from the order","items":[{"sku":"VKS12CMDO","qty":50},{"sku":"VFH1820BBF","qty":24}]}
+
+If nothing found, return: {"shop":"","notes":"","items":[]}`,
+    });
+
+    status.textContent = 'Claude is thinking…';
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'content-type':      'application/json',
         'x-api-key':         ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
+        'anthropic-beta':    'interleaved-thinking-2025-05-14',
       },
       body: JSON.stringify({
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 600,
-        messages: [{
-          role: 'user',
-          content: `You are helping Viking Heads (a fishing jig manufacturer) sort their inbox.
-Classify each email below as a purchase order or NOT.
-
-isOrder = true  → customer sending a NEW purchase order for products
-isOrder = false → replies, questions, complaints, refunds, tracking, shipping confirmations, invoices Viking Heads sent out, statements, "Re:"/"Fwd:" threads, routing guides, catalogs, price lists
-
-Also use the attachment filenames as a signal — "PO", "order", "purchase" in the filename → likely an order. "invoice", "routing guide", "catalog", "statement", "confirmation" → likely NOT an order.
-
-Emails:
-${emailList}
-
-Return ONLY a JSON array, one entry per email, in order:
-[{"index":1,"isOrder":true,"reason":"New PO from shop"},{"index":2,"isOrder":false,"reason":"Reply about shipping"}]
-Keep reasons under 6 words. No extra text.`,
-        }],
+        model:      'claude-opus-4-6',
+        max_tokens: 16000,
+        thinking:   { type: 'enabled', budget_tokens: 10000 },
+        messages:   [{ role: 'user', content }],
       }),
     });
 
-    const data = await response.json();
-    const text = data.content?.[0]?.text || '[]';
-    const match = text.match(/\[[\s\S]*\]/);
-    if (!match) return;
-
-    const results = JSON.parse(match[0]);
-    results.forEach(r => {
-      const row = rows[r.index - 1];
-      if (!row) return;
-      row.isSuspect  = !r.isOrder;
-      row.aiReason   = r.reason || '';
-      row.aiScreened = true;
-    });
-  } catch (e) {
-    // Silently fall back to keyword-only flags — don't break the modal
-    console.warn('AI email screening failed, using keyword fallback:', e.message);
-  }
-}
-
-async function _showGmailModal() {
-  // Build the modal shell with a loading state
-  let modal = document.getElementById('gmail-modal');
-  if (modal) modal.remove();
-  modal = document.createElement('div');
-  modal.id = 'gmail-modal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px';
-  modal.innerHTML = `
-    <div style="background:#0e1f30;border:1px solid #1a3050;border-radius:6px;padding:24px;max-width:680px;width:100%;max-height:84vh;overflow-y:auto">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-        <div class="page-title">📧 Pull Order from Gmail</div>
-        <span style="flex:1"></span>
-        <button class="btn btn-sm" onclick="document.getElementById('gmail-modal').remove()">✕ Close</button>
-      </div>
-      <div id="gmail-modal-body" style="color:#5a7a9a;font-size:13px">Searching inbox…</div>
-    </div>`;
-  document.body.appendChild(modal);
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-
-  // Three parallel queries:
-  //  Q1 — ALL known shops (with OR without attachments — TackleCave sends inline text orders)
-  //  Q2 — TW-specific (orders are always URL-only, never attachments)
-  //  Q3 — broad catch-all for unknown shops (attachment + order-like subject, minus suppliers)
-  const twShops      = KNOWN_SHOPS.filter(s => s.shopKey === 'tw');
-  const fromAll      = KNOWN_SHOPS.map(s => `from:${s.email}`).join(' OR ');
-  const fromTw       = twShops.map(s => `from:${s.email}`).join(' OR ');
-  // Q3: exclude known supplier domains so Worth Co "ORDER SHIPPED" etc. don't pollute results
-  const supplierExclude = SUPPLIER_DOMAINS.map(d => `-from:${d}`).join(' ');
-  const q1 = encodeURIComponent(`(${fromAll})`);
-  const q2 = encodeURIComponent(`(${fromTw}) subject:"Tackle Warehouse PO"`);
-  const q3 = encodeURIComponent(`has:attachment {subject:order subject:PO subject:"purchase order"} -label:sent ${supplierExclude}`);
-
-  try {
-    const [res1, res2, res3] = await Promise.all([
-      fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=30&q=${q1}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
-      fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${q2}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
-      fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=${q3}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
-    ]);
-    if ((!res1.ok && res1.status === 401) || (!res2.ok && res2.status === 401) || (!res3.ok && res3.status === 401)) { _gmailToken = null; showToast('Gmail session expired — click Pull again', 'error'); return; }
-    const [d1, d2, d3] = await Promise.all([res1.json(), res2.json(), res3.json()]);
-
-    // Merge and deduplicate by message ID
-    const seen   = new Set();
-    const msgIds = [];
-    for (const m of [...(d1.messages || []), ...(d2.messages || []), ...(d3.messages || [])]) {
-      if (!seen.has(m.id)) { seen.add(m.id); msgIds.push(m.id); }
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `API error ${response.status}`);
     }
 
-    if (!msgIds.length) {
-      document.getElementById('gmail-modal-body').innerHTML =
-        '<div class="muted">No order emails found from known shops.</div>';
+    const data    = await response.json();
+    // Extract the text block (skip thinking blocks)
+    const textBlock = data.content?.find(b => b.type === 'text');
+    const raw     = textBlock?.text?.trim() || '{}';
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Could not parse Claude response');
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!parsed.items || !parsed.items.length) {
+      result.innerHTML = '<div style="color:#e87070;padding:12px">No order items found. Try providing more detail.</div>';
       return;
     }
 
-    // Fetch full message details (needed to get nested attachment parts)
-    const details = await Promise.all(
-      msgIds.slice(0, 25).map(id =>
-        fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, {
-          headers: { Authorization: `Bearer ${_gmailToken}` },
-        }).then(r => r.json())
-      )
-    );
-
-    // Recursively find attachments through nested multipart structures
-    function findAttachmentParts(parts, msgId, acc = []) {
-      if (!parts) return acc;
-      for (const part of parts) {
-        if (part.filename && part.body?.attachmentId &&
-            /\.(xlsx|xls|csv|jpg|jpeg|png|pdf)$/i.test(part.filename)) {
-          acc.push({ name: part.filename, id: part.body.attachmentId, mimeType: part.mimeType, msgId });
-        }
-        if (part.parts) findAttachmentParts(part.parts, msgId, acc);
-      }
-      return acc;
-    }
-
-    // Build rows — per-shop rules first, AI screener as fallback
-    const rows = details
-      .map(msg => {
-        const headers   = msg.payload?.headers || [];
-        const getHeader = name => (headers.find(h => h.name === name) || {}).value || '';
-        const fromRaw   = getHeader('From');
-        const fromEmail = (fromRaw.match(/<(.+?)>/) || [, fromRaw])[1].toLowerCase().trim();
-        const shopEntry = KNOWN_SHOPS.find(s => s.email.toLowerCase() === fromEmail);
-        const subject   = getHeader('Subject') || '(no subject)';
-        const date      = getHeader('Date');
-        const snippet   = msg.snippet || '';
-
-        const allParts    = msg.payload?.parts || (msg.payload ? [msg.payload] : []);
-        const attachments = findAttachmentParts(allParts, msg.id);
-
-        // Block supplier emails — they are NEVER customer orders
-        const fromDomain = fromEmail.split('@')[1] || '';
-        if (SUPPLIER_DOMAINS.some(d => fromDomain === d || fromDomain.endsWith('.' + d))) return null;
-
-        // Known shops are valid even without attachments (TackleCave = inline text, TW = URL)
-        // Unknown senders without attachments get dropped (nothing to import)
-        if (!attachments.length && !shopEntry) return null;
-
-        // Run per-shop deterministic classifier
-        const ruled = shopEntry ? _shopClassify(shopEntry.shopKey, subject, snippet, attachments) : null;
-
-        const isSuspect    = ruled ? !ruled.isOrder : /^\s*(re|fwd|fw)\s*:/i.test(subject);
-        const shopScreened = ruled !== null;
-        const shopReason   = ruled?.reason || '';
-        const isTW         = ruled?.isTW   || false;
-        const twUrls       = ruled?.twUrls || [];
-
-        // For Lightspeed POS emails, extract real shop name from subject
-        let shopName = shopEntry?.name || fromEmail;
-        if (shopEntry?.shopKey === 'lightspeed') {
-          const lsMatch = subject.match(/^(.+?)\s+Purchase\s+Order\s+#\d+/i);
-          if (lsMatch) shopName = lsMatch[1].trim();
-        }
-
-        return {
-          msgId: msg.id,
-          shop: shopName,
-          shopKey: shopEntry?.shopKey || '',
-          subject, date, snippet, attachments,
-          isSuspect, shopScreened, shopReason,
-          isTW, twUrls,
-          aiScreened: false, aiReason: '',
-        };
-      })
-      .filter(Boolean);
-
-    if (!rows.length) {
-      document.getElementById('gmail-modal-body').innerHTML =
-        '<div class="muted">No order-like emails found. Supplier emails are automatically filtered out.</div>';
-      return;
-    }
-
-    // AI screening — only for rows not already classified by per-shop rules
-    const needsAI = rows.filter(r => !r.shopScreened);
-    if (needsAI.length) {
-      document.getElementById('gmail-modal-body').innerHTML =
-        `<div style="color:#5a7a9a;font-size:13px">🤖 AI screening ${needsAI.length} unrecognised email${needsAI.length !== 1 ? 's' : ''}…</div>`;
-      await _aiScreenEmails(needsAI);
-    }
-
-    // Render the results table
-    const shopScreenedCount = rows.filter(r => r.shopScreened).length;
-    let html = `
-      <div class="muted" style="font-size:12px;margin-bottom:14px">
-        ${rows.length} email${rows.length !== 1 ? 's' : ''} found
-        <span style="margin-left:8px;color:#4a9a6a">✦ ${shopScreenedCount} classified by shop rules</span>
-      </div>
-      <table>
-        <thead><tr><th>Shop</th><th>Subject</th><th>Date</th><th>Attachment / Action</th><th></th></tr></thead>
-        <tbody>`;
-
-    rows.forEach(row => {
-      const dateStr = new Date(row.date).toLocaleDateString();
-
-      // Badge logic: shop rules take priority over AI
-      const reason = row.shopScreened ? row.shopReason : (row.aiScreened ? row.aiReason : '');
-      const source = row.shopScreened ? '📋 Rule' : (row.aiScreened ? '🤖 AI' : '');
-      const warnBadge = row.isSuspect
-        ? `<span title="${source}: ${reason}" style="background:#8b3a3a;color:#ffb3b3;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;cursor:help">⚠ Not an order?</span>`
-        : `<span title="${source}: ${reason}" style="background:#1a3a1a;color:#7ecf7e;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;cursor:help">✓ Order</span>`;
-
-      // ── Tackle Warehouse: show portal link buttons, skip the routing guide ──
-      if (row.isTW) {
-        const poLinks = row.twUrls.length
-          ? row.twUrls.map(url => {
-              const poNum = (url.match(/ponum=(\d+)/) || [])[1] || '?';
-              return `<a href="${url}" target="_blank" class="btn btn-gold btn-sm" style="margin-right:4px">🔗 Open PO ${poNum}</a>`;
-            }).join('')
-          : `<span class="muted" style="font-size:11px">No portal URL in snippet — open email manually</span>`;
-        html += `<tr>
-          <td style="color:#c9a227;font-weight:bold">${row.shop}</td>
-          <td style="font-size:12px">${row.subject}${warnBadge}</td>
-          <td class="muted" style="font-size:12px">${dateStr}</td>
-          <td colspan="2" style="font-size:12px">${poLinks}</td>
-        </tr>`;
-        return;
-      }
-
-      // ── All other shops: one row per attachment, or a single row if no attachments ──
-      if (row.attachments.length) {
-        row.attachments.forEach(att => {
-          const safeShop = row.shop.replace(/'/g, "\\'");
-          const safeName = att.name.replace(/'/g, "\\'");
-          const safeAttId = (att.id||'').replace(/'/g, "\\'");
-          const safeMsgId = (row.msgId||'').replace(/'/g, "\\'");
-          html += `<tr style="${row.isSuspect ? 'opacity:0.6' : ''}">
-            <td style="color:#c9a227;font-weight:bold">${row.shop}</td>
-            <td style="font-size:12px">${row.subject}${warnBadge}</td>
-            <td class="muted" style="font-size:12px">${dateStr}</td>
-            <td style="font-size:12px">${att.name}</td>
-            <td><button class="btn btn-gold btn-sm"
-              onclick="importGmailAttachment(this,'${safeMsgId}','${safeAttId}','${safeName}','${att.mimeType}','${safeShop}')">
-              Import
-            </button></td>
-          </tr>`;
-        });
+    // Validate SKUs
+    const validItems = [];
+    const unknownItems = [];
+    parsed.items.forEach(item => {
+      const sku = (item.sku || '').toUpperCase();
+      const qty = Math.max(1, parseInt(item.qty) || 1);
+      if (SKU_TABLE[sku]) {
+        validItems.push({ sku, qty });
       } else {
-        // No attachments — show row with note (e.g. inline text orders)
-        html += `<tr style="${row.isSuspect ? 'opacity:0.6' : ''}">
-          <td style="color:#c9a227;font-weight:bold">${row.shop}</td>
-          <td style="font-size:12px">${row.subject}${warnBadge}</td>
-          <td class="muted" style="font-size:12px">${dateStr}</td>
-          <td colspan="2" class="muted" style="font-size:11px">No attachment — check email for inline order</td>
-        </tr>`;
+        // Fuzzy match
+        const clean = sku.replace(/[\s\-_.]/g, '');
+        const fuzzy = Object.keys(SKU_TABLE).find(k => k.replace(/[\s\-_.]/g, '') === clean);
+        if (fuzzy) validItems.push({ sku: fuzzy, qty });
+        else unknownItems.push({ sku, qty });
       }
     });
 
-    html += '</tbody></table>';
-    document.getElementById('gmail-modal-body').innerHTML = html;
-
-  } catch(e) {
-    document.getElementById('gmail-modal-body').innerHTML =
-      `<div style="color:#e87070">Error searching Gmail: ${e.message}</div>`;
-  }
-}
-
-async function importGmailAttachment(btn, msgId, attachmentId, filename, mimeType, shopName) {
-  btn.textContent = 'Loading…'; btn.disabled = true;
-
-  try {
-    const res  = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}/attachments/${attachmentId}`, {
-      headers: { Authorization: `Bearer ${_gmailToken}` },
+    // Show results for review
+    const shopName = parsed.shop || '';
+    const notes    = parsed.notes || '';
+    let html = `<div style="border:1px solid #1a3050;border-radius:4px;padding:14px;background:#091a28">
+      <div style="color:#c9a227;font-weight:bold;margin-bottom:10px">Order Preview</div>
+      <div style="margin-bottom:8px"><span class="muted">Shop:</span> <strong style="color:#c9d8e8">${esc(shopName || '(unknown)')}</strong></div>
+      ${notes ? `<div style="margin-bottom:8px"><span class="muted">Notes:</span> <span style="color:#c9d8e8">${esc(notes)}</span></div>` : ''}
+      <table style="width:100%;margin-bottom:12px">
+        <thead><tr><th style="text-align:left">SKU</th><th style="text-align:left">Product</th><th style="text-align:right">Qty</th></tr></thead>
+        <tbody>`;
+    validItems.forEach(({ sku, qty }) => {
+      const info = SKU_TABLE[sku];
+      html += `<tr>
+        <td style="color:#c9a227;font-size:12px">${sku}</td>
+        <td style="font-size:12px">${info.productType} ${info.size} ${info.color}${info.hookSize ? ' ' + info.hookSize : ''}</td>
+        <td style="text-align:right;font-size:12px">${qty}</td>
+      </tr>`;
     });
-    if (!res.ok && res.status === 401) { _gmailToken = null; showToast('Gmail session expired — click Pull again', 'error'); return; }
-    const data = await res.json();
+    html += '</tbody></table>';
 
-    // Gmail returns base64url — convert to a File object so existing parsers work unchanged
-    if (!data.data) throw new Error('Gmail returned empty attachment data');
-    const b64  = data.data.replace(/-/g, '+').replace(/_/g, '/');
-    const bin  = atob(b64);
-    const arr  = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    const file = new File([arr], filename, { type: mimeType });
-
-    // Close the modal
-    document.getElementById('gmail-modal')?.remove();
-
-    // Run through the existing import pipeline
-    const isXlsx = /\.(xlsx|xls)$/i.test(filename);
-    const isCSV  = /\.(csv|txt)$/i.test(filename);
-    let results  = [];
-
-    if (isXlsx) {
-      results = await parseOrderXlsx(file);
-    } else if (isCSV) {
-      results = await parseOrderCsv(await file.text());
-    } else {
-      results = await parseOrderImage(file);
+    if (unknownItems.length) {
+      html += `<div style="color:#e87070;font-size:12px;margin-bottom:8px">⚠ ${unknownItems.length} unrecognized SKU(s) skipped: ${unknownItems.map(i => i.sku).join(', ')}</div>`;
     }
 
-    if (!results.length) {
-      showToast('No valid SKUs found in attachment', 'error');
-      return;
-    }
+    html += `<div style="display:flex;gap:10px;margin-top:10px">
+      <button class="btn btn-gold" onclick="_acceptClaudeOrder()">Add to Orders</button>
+      <button class="btn" onclick="_editClaudeOrder()">Edit First</button>
+      <button class="btn" onclick="document.getElementById('claude-process-modal').remove()">Cancel</button>
+    </div></div>`;
 
-    // Open order form pre-filled with shop name + imported rows
-    if (!orderFormOpen) {
-      orderFormOpen = true;
-      document.getElementById('order-form-wrap').style.display = 'block';
-    }
-    buildOrderForm({ shop: shopName });
-    populateOrderFormRows(results);
-    showToast(`${results.length} SKU${results.length !== 1 ? 's' : ''} imported from Gmail`, 'success');
+    result.innerHTML = html;
 
-  } catch(e) {
-    showToast('Failed to download attachment: ' + e.message, 'error');
-    btn.textContent = 'Import'; btn.disabled = false;
+    // Stash parsed data for accept/edit
+    window._claudeOrderParsed = { shop: shopName, notes, items: validItems };
+
+  } catch (err) {
+    result.innerHTML = `<div style="color:#e87070;padding:12px">Error: ${esc(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Process Order';
+    status.textContent = '';
   }
 }
+
+function _acceptClaudeOrder() {
+  const parsed = window._claudeOrderParsed;
+  if (!parsed || !parsed.items.length) return;
+
+  const data = load();
+  const items = [];
+  parsed.items.forEach(({ sku, qty }) => {
+    const def = SKU_TABLE[sku];
+    if (!def) return;
+    const heads = qty * (HEADS_PER_BAG[def.productType] || 1);
+    const components = calcDeductionsForSku(def, heads);
+    items.push({
+      sku, productType: def.productType, size: def.size, color: def.color,
+      hookSize: def.hookSize, hookKey: def.hookKey, quantity: qty,
+      components, itemStatus: { poured: false, loaded: false, painted: false },
+    });
+  });
+
+  if (!items.length) { showToast('No valid items to add', 'error'); return; }
+
+  // Default due date: 14 days from now
+  const due = new Date();
+  due.setDate(due.getDate() + 14);
+  const dueDate = due.toISOString().split('T')[0];
+
+  data.orders.unshift({
+    id:        Date.now().toString(36) + Math.random().toString(36).slice(2),
+    shop:      parsed.shop || 'Unknown Shop',
+    dueDate,
+    notes:     parsed.notes || '',
+    createdAt: new Date().toISOString(),
+    status:    'pending',
+    archived:  false,
+    items,
+  });
+  save(data);
+
+  document.getElementById('claude-process-modal')?.remove();
+  window._claudeOrderParsed = null;
+  showToast(`Order added: ${parsed.shop || 'Unknown Shop'} — ${items.length} SKU(s)`);
+  renderOrders();
+}
+
+function _editClaudeOrder() {
+  const parsed = window._claudeOrderParsed;
+  if (!parsed) return;
+
+  document.getElementById('claude-process-modal')?.remove();
+  window._claudeOrderParsed = null;
+
+  // Open the order form pre-filled
+  if (!orderFormOpen) {
+    orderFormOpen = true;
+    document.getElementById('order-form-wrap').style.display = 'block';
+  }
+  buildOrderForm({ shop: parsed.shop, notes: parsed.notes });
+  populateOrderFormRows(parsed.items);
+  showToast(`${parsed.items.length} SKU(s) loaded into form — review and submit`);
+}
+
 
 startWithAuthGate();
 </script>
