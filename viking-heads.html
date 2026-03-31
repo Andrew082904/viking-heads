@@ -4213,15 +4213,21 @@ function renderCombinedView(skuAgg, orders, existingBundleId) {
 
   // Head count breakdowns
   const byType = {}, bySize = {}, byShop = {};
+  const bySizeHeads = {}, byShopHeads = {};
   allEntries.forEach(e => {
+    const hpb = HEADS_PER_BAG[e.productType] || 1;
     byType[e.productType] = (byType[e.productType] || 0) + e.totalQty;
     bySize[e.size]        = (bySize[e.size]        || 0) + e.totalQty;
-    e.shops.forEach(s => { byShop[s.shop] = (byShop[s.shop] || 0) + s.qty; });
+    bySizeHeads[e.size]   = (bySizeHeads[e.size]   || 0) + e.totalQty * hpb;
+    e.shops.forEach(s => {
+      byShop[s.shop]      = (byShop[s.shop]      || 0) + s.qty;
+      byShopHeads[s.shop] = (byShopHeads[s.shop] || 0) + s.qty * hpb;
+    });
   });
 
-  const typeRows     = Object.entries(byType).map(([t, q]) => `<tr><td>${t}</td><td class="num" style="padding-left:16px">${q}</td></tr>`).join('');
-  const sizeRows     = Object.entries(bySize).map(([s, q]) => `<tr><td>${s}</td><td class="num" style="padding-left:16px">${q}</td></tr>`).join('');
-  const shopRows     = Object.entries(byShop).map(([s, q]) => `<tr><td>${s}</td><td class="num" style="padding-left:16px">${q}</td></tr>`).join('');
+  const typeRows     = Object.entries(byType).map(([t, q]) => `<tr><td>${t}</td><td class="num" style="padding-left:16px">${q}</td><td class="muted" style="padding-left:8px;font-size:11px">(${q * (HEADS_PER_BAG[t] || 1)} heads)</td></tr>`).join('');
+  const sizeRows     = Object.entries(bySize).map(([s, q]) => `<tr><td>${s}</td><td class="num" style="padding-left:16px">${q}</td><td class="muted" style="padding-left:8px;font-size:11px">(${bySizeHeads[s]} heads)</td></tr>`).join('');
+  const shopRows     = Object.entries(byShop).map(([s, q]) => `<tr><td>${s}</td><td class="num" style="padding-left:16px">${q}</td><td class="muted" style="padding-left:8px;font-size:11px">(${byShopHeads[s]} heads)</td></tr>`).join('');
   const grandSummary = Object.entries(grandTotals).map(([k, v]) => `${v} × ${compLabel(k)}`).join('   |   ');
 
   let rows = '';
