@@ -8,16 +8,32 @@ When adding new features that span backend and frontend, always verify file exte
 
 When working with the preview server, always kill any existing process on the target port before starting a new one. Use `lsof -i :<port> | grep LISTEN` to check, then `kill -9 <pid>` if needed.
 
-## Netlify Usage & Costs
+## Hosting — GitHub Pages (migrated from Netlify Mar 2026)
 
-The Claude API is called via a Netlify serverless function (`netlify/functions/claude-proxy.js`). Every PDF parse, Gmail import, and image parse burns a Netlify function invocation. The free tier allows 125k invocations/month — heavy testing can exhaust this quickly.
+The app is hosted at: https://andrew082904.github.io/viking-heads/viking-heads.html
+Repo: https://github.com/Andrew082904/viking-heads
 
-Before adding any new feature that calls the Claude API, consider:
-- Is this call happening in a loop or on every keystroke? Batch it.
-- Could this be cached? Don't re-parse the same document twice.
-- Is this triggered by the user explicitly, or automatically? Automatic calls are dangerous.
+To deploy updates: commit changes and `git push origin master` — GitHub Pages auto-deploys within ~60 seconds.
 
-If the site hits the Netlify free tier limit, deploys and functions are blocked but the hosted site stays up. Upgrade at app.netlify.com → Team Settings → Billing, or consider moving API calls directly to the frontend (acceptable for this internal-only tool).
+**GitHub tokens:** stored in git remote URL and in user's local memory files (not in code — GitHub secret scanning will block pushes containing tokens).
+
+**The Anthropic API key is stored in the user's browser localStorage (not in code).** If it needs to be reset, call `resetAnthropicKey()` from the browser console. Never hardcode the API key — GitHub's secret scanning will block the push.
+
+**Google OAuth:** The OAuth client must have `https://andrew082904.github.io` in Authorized JavaScript Origins and `https://andrew082904.github.io/viking-heads/viking-heads.html` in Authorized Redirect URIs (console.cloud.google.com → APIs & Services → Credentials).
+
+## Why We Left Netlify
+
+Netlify's free tier has 125k function invocations/month. Heavy testing of the Claude API proxy (PDF parsing, Gmail import, image parsing) exhausted this in one session. The site was disabled mid-session.
+
+The fix: API calls now go directly from the browser to Anthropic — no serverless proxy needed. This works because the app is internal-only (just the Viking Heads team), so exposing the API key in localStorage is acceptable. There are no Netlify function limits to worry about.
+
+**Lesson: Never add automatic or looping Claude API calls.** Every parse must be explicitly triggered by the user. Caching parsed results is strongly preferred over re-parsing.
+
+## Gmail Pull — Known Edge Cases
+
+- **Reply threads (Re: subject):** A customer replying to an invoice email may have the original invoice PDFs still attached. The app flags "Re:" subjects as suspicious (yellow warning badge) — always review before importing.
+- **Outgoing invoices:** Viking Heads' own invoices (e.g., invoice_1666.pdf, invoice_1667.pdf) can appear as attachments in customer reply threads. These are NOT purchase orders. The suspicious email filter catches most of these.
+- **Product type confusion:** Swingheads (VKS) and VK Heads (VKH) are different products. The parser prompt must include the full SKU catalog with descriptions to avoid misidentification.
 
 ## Testing
 

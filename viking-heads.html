@@ -1162,6 +1162,19 @@ function applyMigrations(d) {
     if (order.notes    === undefined) order.notes    = '';
     if (order.archived === undefined) order.archived = false;
   });
+  // Migration: recalculate order item components using bags→heads conversion
+  if (!d._migratedBagComponents) {
+    d.orders.forEach(order => {
+      order.items.forEach(item => {
+        const def = SKU_TABLE[item.sku];
+        if (def) {
+          const heads = item.quantity * (HEADS_PER_BAG[def.productType] || 1);
+          item.components = calcDeductionsForSku(def, heads);
+        }
+      });
+    });
+    d._migratedBagComponents = true;
+  }
   return d;
 }
 
@@ -1656,8 +1669,9 @@ function getSkuPipelineCounts(productType, color, size, hookSize) {
       if (item.color !== color || item.size !== size) return;
       if (hookSize && item.hookSize !== hookSize) return;
       const st = item.itemStatus || {};
-      if (st.painted) bagged += item.quantity;
-      else if (st.poured) poured += item.quantity;
+      const hpb = HEADS_PER_BAG[item.productType] || 1;
+      if (st.painted) bagged += item.quantity;           // bags stay as bags
+      else if (st.poured) poured += item.quantity * hpb; // bags → heads
     });
   });
   return { poured, bagged };
@@ -1687,12 +1701,11 @@ function renderSwingheads() {
       const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
       const valCls = totalQty < 0 ? ' stock-negative-val' : '';
       const pipe = getSkuPipelineCounts('Swinghead', color, size, null);
-      const bags = Math.floor(pipe.bagged / HEADS_PER_BAG['Swinghead']);
       html += `<tr${rowCls}>
         <td>${size}</td>
         <td>${hookDisp}</td>
         <td class="num${valCls}" style="color:#c9a227">${pipe.poured}</td>
-        <td class="num${valCls}" style="color:#4caf7d">${bags}</td>
+        <td class="num${valCls}" style="color:#4caf7d">${pipe.bagged}</td>
         <td>
           <span class="restock-wrap">
             <input type="number" id="${inputId}" placeholder="\u00b1qty">
@@ -1732,12 +1745,11 @@ function renderFinesse() {
         const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
         const valCls = totalQty < 0 ? ' stock-negative-val' : '';
         const pipe = getSkuPipelineCounts('Finesse Head', color, size, hookLabel);
-        const bags = Math.floor(pipe.bagged / HEADS_PER_BAG['Finesse Head']);
         html += `<tr${rowCls}>
           <td>${size}</td>
           <td>${hookLabel}</td>
           <td class="num${valCls}" style="color:#c9a227">${pipe.poured}</td>
-          <td class="num${valCls}" style="color:#4caf7d">${bags}</td>
+          <td class="num${valCls}" style="color:#4caf7d">${pipe.bagged}</td>
           <td>
             <span class="restock-wrap">
               <input type="number" id="${inputId}" placeholder="\u00b1qty">
@@ -2417,11 +2429,10 @@ function renderGenericPage(id) {
       const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
       const valCls = totalQty < 0 ? ' stock-negative-val' : '';
       const pipe = getSkuPipelineCounts(cfg.productType, 'Mixed', size, null);
-      const bags = Math.floor(pipe.bagged / (HEADS_PER_BAG[cfg.productType] || 1));
       html += `<tr${rowCls}>
         <td>${size}</td>
         <td class="num${valCls}" style="color:#c9a227">${pipe.poured}</td>
-        <td class="num${valCls}" style="color:#4caf7d">${bags}</td>
+        <td class="num${valCls}" style="color:#4caf7d">${pipe.bagged}</td>
         <td><span class="restock-wrap">
           <input type="number" id="${inputId}" placeholder="\u00b1qty">
           <button class="btn btn-sm" onclick="adjustGenericQty('${id}','Mixed','${size}','${inputId}')">Add</button>
@@ -2441,12 +2452,11 @@ function renderGenericPage(id) {
         const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
         const valCls = totalQty < 0 ? ' stock-negative-val' : '';
         const pipe = getSkuPipelineCounts(cfg.productType, color, size, null);
-        const bags = Math.floor(pipe.bagged / (HEADS_PER_BAG[cfg.productType] || 1));
         html += `<tr${rowCls}>
           <td>${size}</td>
           ${cfg.hasHook ? `<td>${hookDisp || '\u2014'}</td>` : ''}
           <td class="num${valCls}" style="color:#c9a227">${pipe.poured}</td>
-          <td class="num${valCls}" style="color:#4caf7d">${bags}</td>
+          <td class="num${valCls}" style="color:#4caf7d">${pipe.bagged}</td>
           <td><span class="restock-wrap">
             <input type="number" id="${inputId}" placeholder="\u00b1qty">
             <button class="btn btn-sm" onclick="adjustGenericQty('${id}','${color}','${size}','${inputId}')">Add</button>
@@ -3108,7 +3118,8 @@ function submitOrder() {
     const def = SKU_TABLE[sku];
     if (!def)  { errors.push(`Row ${i + 1}: Unknown SKU "${sku}"`); return; }
     if (qty < 1) { errors.push(`Row ${i + 1}: Quantity must be at least 1`); return; }
-    const components = calcDeductionsForSku(def, qty);
+    const heads = qty * (HEADS_PER_BAG[def.productType] || 1);
+    const components = calcDeductionsForSku(def, heads);
     items.push({ sku, productType: def.productType, size: def.size, color: def.color, hookSize: def.hookSize, hookKey: def.hookKey, quantity: qty, components, itemStatus: { poured: false, loaded: false, painted: false } });
   });
 
@@ -3400,7 +3411,8 @@ function acceptVendorOrder(key) {
     }
     const qty = vi.qty || 0;
     if (qty < 1) return;
-    const components = calcDeductionsForSku(match.def, qty);
+    const heads = qty * (HEADS_PER_BAG[match.def.productType] || 1);
+    const components = calcDeductionsForSku(match.def, heads);
     items.push({
       sku: match.sku,
       productType: match.def.productType,
@@ -3999,7 +4011,9 @@ function confirmShipOrder(orderId) {
     // If partially shipped, keep the remainder
     if (shipped.shipQty < item.quantity) {
       const remaining = { ...item, quantity: item.quantity - shipped.shipQty };
-      remaining.components = calcDeductionsForSku(SKU_TABLE[item.sku] || item, remaining.quantity);
+      const remDef = SKU_TABLE[item.sku] || item;
+      const remHeads = remaining.quantity * (HEADS_PER_BAG[remDef.productType] || 1);
+      remaining.components = calcDeductionsForSku(remDef, remHeads);
       remainingItems.push(remaining);
     }
   });
