@@ -642,9 +642,7 @@
 <!-- LOGIN OVERLAY -->
 <div id="login-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:#050f1a;flex-direction:column;align-items:center;justify-content:center;gap:16px">
   <div style="font-size:22px;font-weight:700;color:#c8a84b;letter-spacing:2px">VIKING HEADS</div>
-  <div style="font-size:13px;color:#5a7a9a;margin-bottom:8px">Sign in to continue</div>
-  <input id="login-email" type="email" placeholder="Email" autocomplete="username"
-    style="width:280px;padding:10px 14px;background:#0d1f30;border:1px solid #1a3050;border-radius:6px;color:#e8e8e8;font-size:14px;outline:none">
+  <div style="font-size:13px;color:#5a7a9a;margin-bottom:8px">Enter password to continue</div>
   <input id="login-password" type="password" placeholder="Password" autocomplete="current-password"
     style="width:280px;padding:10px 14px;background:#0d1f30;border:1px solid #1a3050;border-radius:6px;color:#e8e8e8;font-size:14px;outline:none"
     onkeydown="if(event.key==='Enter')doLogin()">
@@ -4917,15 +4915,13 @@ async function initApp() {
 // AUTH GATE — IP bypass or Firebase login
 // ============================================================
 
-const HOME_IP = '47.151.54.13';
+const PASSWORD_HASH = '647b38c0f327b3f420eb83472326efd5fa4093c947bc0242a65b9793e2f1e062';
 let _firebaseApp = null;
 
-async function getPublicIp() {
-  try {
-    const r = await fetch('https://api.ipify.org?format=json');
-    const j = await r.json();
-    return j.ip;
-  } catch(e) { return null; }
+async function sha256(text) {
+  const data = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function showLoginOverlay() {
@@ -4939,53 +4935,48 @@ function hideLoginOverlay() {
 }
 
 async function doLogin() {
-  const email = document.getElementById('login-email').value.trim();
   const pass  = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
   errEl.textContent = '';
 
-  if (!email || !pass) { errEl.textContent = 'Enter email and password.'; return; }
+  if (!pass) { errEl.textContent = 'Enter password.'; return; }
 
-  try {
-    await firebase.auth(_firebaseApp).signInWithEmailAndPassword(email, pass);
-    hideLoginOverlay();
-    initApp();
-  } catch(e) {
-    errEl.textContent = 'Incorrect email or password.';
+  const hash = await sha256(pass);
+  if (hash !== PASSWORD_HASH) {
+    errEl.textContent = 'Incorrect password.';
+    return;
   }
+
+  // Password correct — save session and sign into Firebase
+  sessionStorage.setItem('vk_authed', '1');
+  await _firebaseSignIn();
+  hideLoginOverlay();
+  initApp();
+}
+
+async function _firebaseSignIn() {
+  try {
+    await firebase.auth(_firebaseApp).signInAnonymously();
+    await new Promise(resolve => {
+      const unsub = firebase.auth(_firebaseApp).onAuthStateChanged(user => {
+        if (user) { unsub(); resolve(); }
+      });
+    });
+  } catch(e) { console.warn('Firebase sign-in failed:', e.message); }
 }
 
 async function startWithAuthGate() {
   const cfg = getFirebaseConfig();
   _firebaseApp = firebase.initializeApp(cfg);
 
-  // Check if already signed in from a previous session
-  const currentUser = await new Promise(resolve => {
-    const unsub = firebase.auth(_firebaseApp).onAuthStateChanged(user => {
-      unsub();
-      resolve(user);
-    });
-  });
-
-  if (currentUser) { initApp(); return; }
-
-  // Check home IP — bypass login if on home network
-  const ip = await getPublicIp();
-  if (ip === HOME_IP) {
-    try {
-      await firebase.auth(_firebaseApp).signInAnonymously();
-      // Wait for auth state to fully propagate before hitting the database
-      await new Promise(resolve => {
-        const unsub = firebase.auth(_firebaseApp).onAuthStateChanged(user => {
-          if (user) { unsub(); resolve(); }
-        });
-      });
-    } catch(e) { console.warn('Anonymous sign-in failed:', e.message); }
+  // Check if already authenticated this session
+  if (sessionStorage.getItem('vk_authed') === '1') {
+    await _firebaseSignIn();
     initApp();
     return;
   }
 
-  // Not home, not signed in — show login
+  // Not authenticated — show login
   showLoginOverlay();
 }
 
