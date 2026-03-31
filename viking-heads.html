@@ -1235,7 +1235,7 @@ function save(data) {
   if (_db) {
     _pendingSaves++;
     _db.ref('vikingHeads').set(data)
-      .then(() => showToast('Synced to Firebase ✓'))
+      .then(() => {})
       .catch(e => { console.warn('Firebase save failed:', e); showToast('Firebase sync failed', 'error'); })
       .finally(() => { _pendingSaves--; });
   }
