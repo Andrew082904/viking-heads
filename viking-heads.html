@@ -1535,7 +1535,8 @@ function renderDashboard() {
       if (!a.dueDate) return 1; if (!b.dueDate) return -1;
       return a.dueDate.localeCompare(b.dueDate);
     }).forEach(o => {
-      const heads = o.items.reduce((s, i) => s + i.quantity, 0);
+      const bags = o.items.reduce((s, i) => s + i.quantity, 0);
+      const headCount = o.items.reduce((s, i) => s + i.quantity * (HEADS_PER_BAG[i.productType] || 1), 0);
       const days = o.dueDate ? Math.round((new Date(o.dueDate + 'T00:00:00') - now) / 86400000) : null;
       const isOverdue = days !== null && days < 0;
       const isDueSoon = days !== null && days >= 0 && days <= 3;
@@ -1547,7 +1548,7 @@ function renderDashboard() {
       html += `<div style="padding:6px 0;border-bottom:1px solid #1a3050;display:flex;align-items:center;gap:8px">
         <span style="color:#c9a227;font-weight:600;font-size:12px;letter-spacing:.5px;min-width:100px">${esc(o.shop)}</span>
         <span style="color:${statusColor};font-size:9px;letter-spacing:1px;text-transform:uppercase">${o.status}</span>
-        <span class="muted" style="font-size:11px">${heads} bags</span>
+        <span class="muted" style="font-size:11px">${bags} bags (${headCount} heads)</span>
         <span style="flex:1"></span>
         ${dueBadge}
       </div>`;
@@ -1589,6 +1590,7 @@ function showShopDetail(shop) {
   if (!orders.length) return;
 
   const totalHeads = orders.reduce((s, o) => s + o.items.reduce((ss, i) => ss + i.quantity, 0), 0);
+  const totalHeadsActual = orders.reduce((s, o) => s + o.items.reduce((ss, i) => ss + i.quantity * (HEADS_PER_BAG[i.productType] || 1), 0), 0);
 
   // Aggregate SKUs across all orders for this shop
   const skuTotals = {};
@@ -1605,7 +1607,7 @@ function showShopDetail(shop) {
       </div>
       <div style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap">
         <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Total Orders</span><div style="font-size:20px;color:#c9d8e8">${orders.length}</div></div>
-        <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Total Bags</span><div style="font-size:20px;color:#c9a227">${totalHeads}</div></div>
+        <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Total Bags</span><div style="font-size:20px;color:#c9a227">${totalHeads} <span style="font-size:13px;color:#8aadcf">(${totalHeadsActual} heads)</span></div></div>
         <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">First Order</span><div style="font-size:14px;color:#c9d8e8">${fmtDate(orders[orders.length - 1].createdAt)}</div></div>
         <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Last Order</span><div style="font-size:14px;color:#c9d8e8">${fmtDate(orders[0].createdAt)}</div></div>
       </div>`;
@@ -1623,15 +1625,17 @@ function showShopDetail(shop) {
 
   // Order history
   html += `<div style="color:#8aadcf;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin:16px 0 6px">Order History</div>
-    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Status</th><th>Items</th><th>Bags</th><th>Due</th></tr></thead><tbody>`;
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Status</th><th>Items</th><th>Bags</th><th>Heads</th><th>Due</th></tr></thead><tbody>`;
   orders.forEach(o => {
-    const heads = o.items.reduce((s, i) => s + i.quantity, 0);
+    const bags = o.items.reduce((s, i) => s + i.quantity, 0);
+    const hCount = o.items.reduce((s, i) => s + i.quantity * (HEADS_PER_BAG[i.productType] || 1), 0);
     const statusColor = { pending: '#e8a020', poured: '#4caf7d', partial: '#e8a870', shipped: '#4cdf8d' }[o.status] || '#5a7a9a';
     html += `<tr${o.archived ? ' style="opacity:.6"' : ''}>
       <td class="muted">${fmtDate(o.createdAt)}</td>
       <td style="color:${statusColor};font-size:10px;letter-spacing:1px;text-transform:uppercase">${o.status}${o.archived ? ' (archived)' : ''}</td>
       <td class="num">${o.items.length}</td>
-      <td class="num">${heads}</td>
+      <td class="num">${bags}</td>
+      <td class="num">${hCount}</td>
       <td class="muted">${o.dueDate}</td>
     </tr>`;
   });
@@ -2097,7 +2101,8 @@ function renderOrderAlertCards(data, now) {
   const renderCard = (o, isOverdue) => {
     const dueDate = new Date(o.dueDate + 'T00:00:00');
     const daysDiff = Math.abs(Math.round((dueDate - now) / 86400000));
-    const heads = o.items.reduce((s, i) => s + i.quantity, 0);
+    const bags = o.items.reduce((s, i) => s + i.quantity, 0);
+    const alertHeadCount = o.items.reduce((s, i) => s + i.quantity * (HEADS_PER_BAG[i.productType] || 1), 0);
     const unpoured = o.items.filter(i => !i.itemStatus || !i.itemStatus.poured);
     const fulfill = canFulfillOrder(o);
 
@@ -2115,7 +2120,7 @@ function renderOrderAlertCards(data, now) {
       <div class="order-alert-top">
         <span class="order-alert-shop">${o.shop.toUpperCase()}</span>
         ${dueBadge} ${fulfillBadge}
-        <span class="muted" style="font-size:11px">${heads} bags · ${unpoured.length} unpoured · ${o.status}</span>
+        <span class="muted" style="font-size:11px">${bags} bags (${alertHeadCount} heads) · ${unpoured.length} unpoured · ${o.status}</span>
         <span style="flex:1"></span>
         <button class="btn btn-sm" onclick="showPage('orders')">Go to Orders</button>
       </div>
@@ -3766,10 +3771,11 @@ function renderOrders() {
       <div style="display:none">`;
     archivedOrders.forEach(order => {
       const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
+      const archHeadCount = order.items.reduce((s, i) => s + i.quantity * (HEADS_PER_BAG[i.productType] || 1), 0);
       html += `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 14px;background:#0a1520;border:1px solid #1a2a3a;border-radius:4px;margin-bottom:6px;opacity:.75">
         <span style="color:#5a7a9a;font-weight:bold">${order.shop.toUpperCase()}</span>
         <span class="muted" style="font-size:12px">Due: ${order.dueDate}</span>
-        <span class="muted" style="font-size:12px">${totalQty} bags · ${order.items.length} SKUs</span>
+        <span class="muted" style="font-size:12px">${totalQty} bags (${archHeadCount} heads) · ${order.items.length} SKUs</span>
         <span style="flex:1"></span>
         <button class="btn btn-sm" onclick="unarchiveOrder('${order.id}')">↩ Restore</button>
         <button class="btn btn-danger btn-sm" onclick="deleteOrder('${order.id}')">Delete</button>
@@ -3783,9 +3789,10 @@ function renderOrders() {
     html += `<div style="margin-top:32px">
       <div style="color:#8aadcf;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px">Saved Bundles</div>`;
     data.bundles.forEach(bundle => {
+      const bundleHeadCount = bundle.skuAgg ? Object.values(bundle.skuAgg).reduce((s, e) => s + e.totalQty * (HEADS_PER_BAG[e.productType] || 1), 0) : bundle.totalHeads;
       html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:#0e1f30;border:1px solid #1a3050;border-radius:4px;margin-bottom:8px;flex-wrap:wrap">
         <span style="color:#c9a227;font-weight:bold">${bundle.name}</span>
-        <span class="muted" style="font-size:12px">${bundle.totalHeads} bags · ${bundle.skuCount} SKUs · ${bundle.orderCount} orders</span>
+        <span class="muted" style="font-size:12px">${bundle.totalHeads} bags (${bundleHeadCount} heads) · ${bundle.skuCount} SKUs · ${bundle.orderCount} orders</span>
         <span class="muted" style="font-size:11px">Created: ${fmtDate(bundle.createdAt)}</span>
         <span style="flex:1"></span>
         <button class="btn btn-sm" onclick="openBundle('${bundle.id}')">View</button>
@@ -3945,6 +3952,7 @@ function renderOrderCard(order) {
     : '';
 
   const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
+  const totalHeadCount = order.items.reduce((s, i) => s + i.quantity * (HEADS_PER_BAG[i.productType] || 1), 0);
   const skuCount = order.items.length;
 
   // Due date badge (show on pending and partial orders)
@@ -3978,7 +3986,7 @@ function renderOrderCard(order) {
         ${statusBadge}${dueBadge}${fulfillBadge}
       </div>
       <div class="oc-row2">
-        <span class="muted" style="font-size:12px">${totalQty} bags · ${skuCount} SKU${skuCount !== 1 ? 's' : ''}</span>
+        <span class="muted" style="font-size:12px">${totalQty} bags (${totalHeadCount} heads) · ${skuCount} SKU${skuCount !== 1 ? 's' : ''}</span>
         <span class="muted">Due: ${order.dueDate}</span>
         ${notesSnip}
         <span style="flex:1"></span>
@@ -4201,6 +4209,7 @@ function renderCombinedView(skuAgg, orders, existingBundleId) {
   const allEntries  = Object.values(skuAgg);
   const grandTotals = aggregateComponents(allEntries.map(e => e.components));
   const grandQty    = allEntries.reduce((s, e) => s + e.totalQty, 0);
+  const grandHeads  = allEntries.reduce((s, e) => s + e.totalQty * (HEADS_PER_BAG[e.productType] || 1), 0);
 
   // Head count breakdowns
   const byType = {}, bySize = {}, byShop = {};
@@ -4250,7 +4259,7 @@ function renderCombinedView(skuAgg, orders, existingBundleId) {
     <div style="display:flex;gap:24px;margin-bottom:20px;flex-wrap:wrap">
       <span class="muted">Shops: <span style="color:#e8e8e8">${shopNames}</span></span>
       <span class="muted">Due Dates: <span style="color:#e8e8e8">${dueDates}</span></span>
-      <span class="muted">Total Bags: <span style="color:#c9a227;font-weight:bold;font-size:16px">${grandQty}</span></span>
+      <span class="muted">Total Bags: <span style="color:#c9a227;font-weight:bold;font-size:16px">${grandQty}</span> <span style="font-size:13px">(${grandHeads} heads)</span></span>
     </div>
 
     <!-- Head Count Summary Cards -->
@@ -4344,6 +4353,7 @@ function printOrder(orderId) {
   if (!order) return;
 
   const totalQty    = order.items.reduce((s, i) => s + i.quantity, 0);
+  const printHeadCount = order.items.reduce((s, i) => s + i.quantity * (HEADS_PER_BAG[i.productType] || 1), 0);
   const totals      = aggregateComponents(order.items.map(i => i.components));
   const summaryLine = Object.entries(totals).map(([k, v]) => `${v} × ${compLabel(k)}`).join('  |  ');
 
@@ -4372,7 +4382,7 @@ function printOrder(orderId) {
       <strong>Shop:</strong> ${order.shop} &nbsp;&nbsp;
       <strong>Due:</strong> ${order.dueDate} &nbsp;&nbsp;
       <strong>Status:</strong> ${order.status.toUpperCase()} &nbsp;&nbsp;
-      <strong>Total Bags:</strong> ${totalQty}
+      <strong>Total Bags:</strong> ${totalQty} (${printHeadCount} heads)
     </p>
     <table>
       <thead><tr>
@@ -4426,6 +4436,7 @@ function _printCombinedData(skuAgg, orders) {
   const allEntries  = Object.values(skuAgg);
   const grandTotals = aggregateComponents(allEntries.map(e => e.components));
   const grandQty    = allEntries.reduce((s, e) => s + e.totalQty, 0);
+  const grandHeadsPrint = allEntries.reduce((s, e) => s + e.totalQty * (HEADS_PER_BAG[e.productType] || 1), 0);
   const shopNames   = [...new Set(orders.map(o => o.shop))].join(', ');
   const dueDates    = [...new Set(orders.map(o => o.dueDate))].sort().join(', ');
 
@@ -4462,7 +4473,7 @@ function _printCombinedData(skuAgg, orders) {
     <p style="margin:0 0 12px;color:#555">
       <strong>Shops:</strong> ${shopNames} &nbsp;&nbsp;
       <strong>Due:</strong> ${dueDates} &nbsp;&nbsp;
-      <strong>Total Bags:</strong> ${grandQty}
+      <strong>Total Bags:</strong> ${grandQty} (${grandHeadsPrint} heads)
     </p>
     ${summaryBlock}
     <table>
@@ -4528,6 +4539,7 @@ function saveBundle() {
     createdAt:  new Date().toISOString(),
   };
 
+  if (!Array.isArray(data.bundles)) data.bundles = [];
   data.bundles.unshift(bundle);
   save(data);
   showToast('Bundle saved');
