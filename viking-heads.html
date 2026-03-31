@@ -3846,7 +3846,6 @@ function renderOrderCard(order) {
         <button id="order-toggle-${order.id}" class="btn btn-sm" onclick="event.stopPropagation();toggleOrderDetails('${order.id}')">▼ Details</button>
         ${shipBtn}
         <button class="btn btn-sm" onclick="event.stopPropagation();printOrder('${order.id}')">🖨</button>
-        <button class="btn btn-sm" onclick="event.stopPropagation();duplicateOrder('${order.id}')" title="Clone this order">⧉</button>
         <button class="btn btn-sm" onclick="event.stopPropagation();archiveOrder('${order.id}')" title="Move to archive">📦</button>
         <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder('${order.id}')">✕</button>
       </div>
