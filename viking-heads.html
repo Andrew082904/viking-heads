@@ -465,6 +465,74 @@
       .col-components { display: none; }
       .col-created    { display: none; }
     }
+
+    /* ---- Mobile Orders overhaul ---- */
+    @media (max-width: 600px) {
+      /* Order card header: stack into clean rows */
+      .order-card-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 6px !important;
+        padding: 10px 12px !important;
+      }
+      .order-card-header .oc-row1 {
+        display: flex; align-items: center; gap: 8px;
+      }
+      .order-card-header .oc-row2 {
+        display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      }
+      .order-card-header .oc-row3 {
+        display: flex; gap: 6px; flex-wrap: wrap;
+      }
+
+      /* Sort bars: collapse into a toggle */
+      .order-sort-wrap { display: none; }
+      .order-sort-wrap.open { display: block; }
+      .order-sort-toggle { display: flex !important; }
+
+      /* Details: switch from table to card layout */
+      .order-detail-table thead { display: none; }
+      .order-detail-table tbody tr {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto auto;
+        gap: 2px 8px;
+        padding: 8px 0;
+        border-bottom: 1px solid #1a3050;
+      }
+      .order-detail-table tbody tr:last-child { border-bottom: none; }
+      /* SKU + Qty */
+      .order-detail-table .odt-sku  { grid-column: 1; grid-row: 1; font-weight: 600; color: #c9a227; font-size: 12px; }
+      .order-detail-table .odt-qty  { grid-column: 2; grid-row: 1; text-align: right; font-weight: 700; }
+      /* Product + Size + Color + Hook in one line */
+      .order-detail-table .odt-desc { grid-column: 1 / -1; grid-row: 2; font-size: 11px; color: #5a7a9a; }
+      /* Status bar full width */
+      .order-detail-table .odt-status { grid-column: 1 / -1; grid-row: 3; padding: 4px 0 !important; }
+      .order-detail-table .odt-status > div { min-width: 0 !important; }
+      /* Hide individual columns, show combined desc */
+      .order-detail-table .odt-hide { display: none; }
+      .order-detail-table .odt-desc { display: block !important; }
+      /* Total row */
+      .order-detail-table .odt-total-row {
+        display: flex !important; align-items: center; gap: 8px; padding: 10px 0;
+        border-top: 2px solid #1a3050;
+      }
+      .order-detail-table .odt-total-row td { display: inline; border: none; padding: 0; }
+
+      /* Bulk status bar */
+      .bulk-status-bar {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 4px !important;
+      }
+      .bulk-status-bar .bulk-label { grid-column: 1 / -1; }
+      .bulk-status-bar .bulk-spacer { display: none; }
+    }
+
+    @media (min-width: 601px) {
+      .order-sort-toggle { display: none !important; }
+      .oc-row1, .oc-row2, .oc-row3 { display: contents; }
+    }
   }
 
   /* TOASTS */
@@ -1244,116 +1312,76 @@ function renderDashboard() {
   if (!wrap) return;
 
   const now = new Date(); now.setHours(0,0,0,0);
-  const activeOrders = data.orders.filter(o => !o.archived);
-  const pendingOrders = activeOrders.filter(o => o.status === 'pending');
-  const pouredOrders  = activeOrders.filter(o => o.status === 'poured');
-  const partialOrders = activeOrders.filter(o => o.status === 'partial');
+  const activeOrders = data.orders.filter(o => !o.archived && o.status !== 'shipped');
 
-  // Overdue & due soon
-  const overdueOrders = activeOrders.filter(o =>
-    o.status !== 'shipped' && o.status !== 'poured' && new Date(o.dueDate + 'T00:00:00') < now
-  );
-  const dueSoonOrders = activeOrders.filter(o => {
-    if (o.status === 'shipped') return false;
-    const days = Math.round((new Date(o.dueDate + 'T00:00:00') - now) / 86400000);
-    return days >= 0 && days <= 3;
-  });
-
-  // Total heads across active orders
-  const totalHeads = activeOrders.reduce((s, o) => s + o.items.reduce((ss, i) => ss + i.quantity, 0), 0);
-
-  // Component alerts
+  // Low stock components
   const _thresholds = getComponentThresholds();
-  const lowStockCount = COMPONENTS.filter(def => (data.components[def.key] || 0) < (_thresholds[def.label] || 50)).length;
+  const lowStockItems = COMPONENTS.filter(def => (data.components[def.key] || 0) < (_thresholds[def.label] || 50))
+    .map(def => ({ label: def.label, qty: data.components[def.key] || 0, threshold: _thresholds[def.label] || 50 }))
+    .sort((a, b) => (a.qty / a.threshold) - (b.qty / b.threshold));
 
-  // Recent pours (last 7 days)
-  const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
-  const recentPours = data.pours.filter(p => !p.isShipment && !p.isAdjustment && new Date(p.date) >= weekAgo);
-  const recentHeadsPoured = recentPours.reduce((s, p) => s + p.quantity, 0);
+  let html = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">`;
 
-  // Recent shipments (last 7 days)
-  const recentShipments = data.pours.filter(p => p.isShipment && new Date(p.date) >= weekAgo);
-  const recentHeadsShipped = Math.abs(recentShipments.reduce((s, p) => s + p.quantity, 0));
-
-  // ---- Summary cards ----
-  let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">`;
-
-  const card = (label, value, color, sub) => `
-    <div style="background:#0e1f30;border:1px solid #1a3050;border-radius:4px;padding:14px 16px">
-      <div style="color:#5a7a9a;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px">${label}</div>
-      <div style="color:${color};font-size:24px;font-weight:bold;letter-spacing:1px">${value}</div>
-      ${sub ? `<div class="muted" style="font-size:11px;margin-top:2px">${sub}</div>` : ''}
+  // ---- Active Orders box ----
+  html += `<div style="background:#0e1f30;border:1px solid #1a3050;border-radius:6px;padding:16px;cursor:pointer" onclick="showPage('orders')">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="color:#8aadcf;font-size:11px;letter-spacing:2px;text-transform:uppercase">Active Orders</div>
+      <div style="color:#c9a227;font-size:22px;font-weight:bold">${activeOrders.length}</div>
     </div>`;
 
-  html += card('Active Orders', activeOrders.length, '#c9d8e8',
-    `${pendingOrders.length} pending · ${pouredOrders.length} poured${partialOrders.length ? ` · ${partialOrders.length} partial` : ''}`);
-  html += card('Total Heads', totalHeads, '#c9a227', 'across active orders');
-  html += card('Poured (7d)', recentHeadsPoured, '#4caf7d', `${recentPours.length} pours`);
-  html += card('Shipped (7d)', recentHeadsShipped, '#4cdf8d', `${recentShipments.length} shipments`);
-  html += card('Overdue', overdueOrders.length, overdueOrders.length ? '#f09090' : '#4caf7d',
-    overdueOrders.length ? 'orders past due date' : 'none');
-  html += card('Low Stock', lowStockCount, lowStockCount ? '#e09050' : '#4caf7d',
-    lowStockCount ? 'components below threshold' : 'all good');
-
-  html += `</div>`;
-
-  // ---- Urgent orders ----
-  if (overdueOrders.length || dueSoonOrders.length) {
-    html += `<div style="margin-bottom:20px">
-      <div style="color:#8aadcf;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px">Urgent Orders</div>`;
-    [...overdueOrders, ...dueSoonOrders].forEach(o => {
-      const days = Math.round((new Date(o.dueDate + 'T00:00:00') - now) / 86400000);
+  if (activeOrders.length) {
+    activeOrders.sort((a, b) => {
+      if (!a.dueDate) return 1; if (!b.dueDate) return -1;
+      return a.dueDate.localeCompare(b.dueDate);
+    }).forEach(o => {
       const heads = o.items.reduce((s, i) => s + i.quantity, 0);
-      const isOverdue = days < 0;
-      html += `<div style="padding:8px 12px;background:${isOverdue ? '#2a0a0a' : '#1a1400'};border:1px solid ${isOverdue ? '#5a2020' : '#4a3a00'};border-radius:4px;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <span style="color:#c9a227;font-weight:bold;letter-spacing:1px">${o.shop.toUpperCase()}</span>
-        <span class="${isOverdue ? 'badge-overdue' : 'badge-due-soon'}">${isOverdue ? `OVERDUE ${Math.abs(days)}d` : `DUE IN ${days}d`}</span>
-        <span class="muted" style="font-size:11px">${heads} heads · ${o.status}</span>
+      const days = o.dueDate ? Math.round((new Date(o.dueDate + 'T00:00:00') - now) / 86400000) : null;
+      const isOverdue = days !== null && days < 0;
+      const isDueSoon = days !== null && days >= 0 && days <= 3;
+      const statusColor = { pending: '#e8a020', poured: '#4caf7d', partial: '#e8a870' }[o.status] || '#5a7a9a';
+      let dueBadge = '';
+      if (isOverdue) dueBadge = `<span class="badge-overdue" style="font-size:9px;padding:1px 5px">OVERDUE ${Math.abs(days)}d</span>`;
+      else if (isDueSoon) dueBadge = `<span class="badge-due-soon" style="font-size:9px;padding:1px 5px">DUE ${days}d</span>`;
+      else if (o.dueDate) dueBadge = `<span class="muted" style="font-size:10px">${o.dueDate}</span>`;
+      html += `<div style="padding:6px 0;border-bottom:1px solid #1a3050;display:flex;align-items:center;gap:8px">
+        <span style="color:#c9a227;font-weight:600;font-size:12px;letter-spacing:.5px;min-width:100px">${esc(o.shop)}</span>
+        <span style="color:${statusColor};font-size:9px;letter-spacing:1px;text-transform:uppercase">${o.status}</span>
+        <span class="muted" style="font-size:11px">${heads} heads</span>
         <span style="flex:1"></span>
-        <button class="btn btn-sm" onclick="showPage('orders')">View</button>
+        ${dueBadge}
       </div>`;
     });
-    html += `</div>`;
+  } else {
+    html += `<div class="muted" style="text-align:center;padding:20px;font-size:12px">No active orders</div>`;
   }
+  html += `</div>`;
 
-  // ---- Shop history ----
-  const allOrders = data.orders;
-  const shopMap = {};
-  allOrders.forEach(o => {
-    if (!shopMap[o.shop]) shopMap[o.shop] = { orders: [], totalHeads: 0, shipped: 0, active: 0 };
-    shopMap[o.shop].orders.push(o);
-    const heads = o.items.reduce((s, i) => s + i.quantity, 0);
-    shopMap[o.shop].totalHeads += heads;
-    if (o.archived || o.status === 'shipped') shopMap[o.shop].shipped++;
-    else shopMap[o.shop].active++;
-  });
+  // ---- Low Stock box ----
+  html += `<div style="background:#0e1f30;border:1px solid #1a3050;border-radius:6px;padding:16px;cursor:pointer" onclick="showPage('components')">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="color:#8aadcf;font-size:11px;letter-spacing:2px;text-transform:uppercase">Low Stock</div>
+      <div style="color:${lowStockItems.length ? '#e09050' : '#4caf7d'};font-size:22px;font-weight:bold">${lowStockItems.length}</div>
+    </div>`;
 
-  // Sort shops by total heads descending
-  const shopList = Object.entries(shopMap).sort((a, b) => b[1].totalHeads - a[1].totalHeads);
-
-  if (shopList.length) {
-    html += `<div style="margin-bottom:20px">
-      <div style="color:#8aadcf;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px">Shop History</div>
-      <div class="table-wrap"><table>
-        <thead><tr>
-          <th>Shop</th><th>Total Orders</th><th>Active</th><th>Shipped/Archived</th><th>Total Heads</th><th>Last Order</th><th></th>
-        </tr></thead><tbody>`;
-    shopList.forEach(([shop, info]) => {
-      const lastOrder = info.orders.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-      const lastDate = lastOrder ? fmtDate(lastOrder.createdAt) : '—';
-      html += `<tr>
-        <td style="color:#c9a227;font-weight:bold;letter-spacing:1px">${shop}</td>
-        <td class="num">${info.orders.length}</td>
-        <td class="num">${info.active}</td>
-        <td class="num">${info.shipped}</td>
-        <td class="num">${info.totalHeads}</td>
-        <td class="muted">${lastDate}</td>
-        <td><button class="btn btn-sm" onclick="showShopDetail('${shop.replace(/'/g, "\\'")}')">Details</button></td>
-      </tr>`;
+  if (lowStockItems.length) {
+    lowStockItems.forEach(item => {
+      const pct = Math.min(100, Math.round((item.qty / item.threshold) * 100));
+      const barColor = pct < 25 ? '#f09090' : pct < 50 ? '#e09050' : '#c9a227';
+      html += `<div style="padding:6px 0;border-bottom:1px solid #1a3050;display:flex;align-items:center;gap:8px">
+        <span style="color:#c9d8e8;font-size:12px;min-width:120px">${item.label}</span>
+        <div style="flex:1;height:6px;background:#071420;border-radius:3px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${barColor};border-radius:3px"></div>
+        </div>
+        <span style="color:${barColor};font-size:11px;font-weight:600;min-width:50px;text-align:right">${item.qty}</span>
+        <span class="muted" style="font-size:10px">/ ${item.threshold}</span>
+      </div>`;
     });
-    html += `</tbody></table></div></div>`;
+  } else {
+    html += `<div style="color:#4caf7d;text-align:center;padding:20px;font-size:12px">All components above threshold</div>`;
   }
+  html += `</div>`;
 
+  html += `</div>`;
   wrap.innerHTML = html;
 }
 
@@ -3474,15 +3502,17 @@ function renderOrders() {
 
   // Sort controls
   const sortBar = `
+  <button class="btn btn-sm order-sort-toggle" style="display:none;margin-bottom:8px;width:100%" onclick="this.nextElementSibling.classList.toggle('open')">⇅ Sort & Filter</button>
+  <div class="order-sort-wrap">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
     <span class="muted" style="font-size:11px;min-width:68px">Order Sort:</span>
     ${[
-      ['created_desc', 'Newest First'],
-      ['due_asc',      'Due Date ↑'],
-      ['due_desc',     'Due Date ↓'],
-      ['shop_az',      'Shop A–Z'],
-      ['heads_desc',   'Most Heads'],
-      ['status',       'Pending First'],
+      ['created_desc', 'Newest'],
+      ['due_asc',      'Due ↑'],
+      ['due_desc',     'Due ↓'],
+      ['shop_az',      'A–Z'],
+      ['heads_desc',   'Heads'],
+      ['status',       'Pending'],
     ].map(([mode, label]) =>
       `<button class="btn btn-sm${orderSortMode === mode ? ' btn-gold' : ''}" onclick="setOrderSort('${mode}')">${label}</button>`
     ).join('')}
@@ -3497,6 +3527,7 @@ function renderOrders() {
         : '';
       return `<button id="item-sort-btn-${m}" class="btn btn-sm${active ? ' btn-gold' : ''}" onclick="setItemSort('${m}')">${label}${badge}</button>`;
     }).join('')}
+  </div>
   </div>`;
 
   const q = orderSearchVal.trim().toLowerCase();
@@ -3593,12 +3624,13 @@ function renderOrderDetailsContent(order) {
   const totalQty    = order.items.reduce((s, i) => s + i.quantity, 0);
 
   // Bulk status bar
-  const bulkBar = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 10px;align-items:center">
-    <span class="muted" style="font-size:10px;letter-spacing:1px;text-transform:uppercase">Bulk:</span>
-    <button class="btn btn-sm" onclick="bulkSetItemStatus('${order.id}','poured',true)">✓ All Poured</button>
-    <button class="btn btn-sm" onclick="bulkSetItemStatus('${order.id}','loaded',true)">✓ All Loaded</button>
-    <button class="btn btn-sm" onclick="bulkSetItemStatus('${order.id}','painted',true)">✓ All Bagged</button>
-    <button class="btn btn-sm btn-danger" style="margin-left:8px" onclick="bulkSetItemStatus('${order.id}','poured',false)">✕ Poured</button>
+  const bulkBar = `<div class="bulk-status-bar" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 10px;align-items:center">
+    <span class="bulk-label muted" style="font-size:10px;letter-spacing:1px;text-transform:uppercase">Bulk:</span>
+    <button class="btn btn-sm" onclick="bulkSetItemStatus('${order.id}','poured',true)">✓ Poured</button>
+    <button class="btn btn-sm" onclick="bulkSetItemStatus('${order.id}','loaded',true)">✓ Loaded</button>
+    <button class="btn btn-sm" onclick="bulkSetItemStatus('${order.id}','painted',true)">✓ Bagged</button>
+    <span class="bulk-spacer" style="margin-left:8px"></span>
+    <button class="btn btn-sm btn-danger" onclick="bulkSetItemStatus('${order.id}','poured',false)">✕ Poured</button>
     <button class="btn btn-sm btn-danger" onclick="bulkSetItemStatus('${order.id}','loaded',false)">✕ Loaded</button>
     <button class="btn btn-sm btn-danger" onclick="bulkSetItemStatus('${order.id}','painted',false)">✕ Bagged</button>
   </div>`;
@@ -3628,29 +3660,31 @@ function renderOrderDetailsContent(order) {
     </div>`;
     const logPourBtn = '';
     itemRows += `<tr>
-      <td class="muted">${item.sku}</td>
-      <td>${item.productType}</td>
-      <td>${item.size}</td>
-      <td>${item.color}</td>
-      <td>${item.hookSize || '—'}</td>
-      <td class="num">${item.quantity}</td>
-      <td class="muted" style="font-size:11px">${compSummary}</td>
-      <td style="padding:4px 8px">${statusBar}</td>
+      <td class="odt-sku odt-hide">${item.sku}</td>
+      <td class="odt-hide">${item.productType}</td>
+      <td class="odt-hide">${item.size}</td>
+      <td class="odt-hide">${item.color}</td>
+      <td class="odt-hide">${item.hookSize || '—'}</td>
+      <td class="odt-qty num">${item.quantity}</td>
+      <td class="odt-hide muted" style="font-size:11px">${compSummary}</td>
+      <td class="odt-status" style="padding:4px 8px">${statusBar}</td>
+      <td class="odt-desc" style="display:none">${item.sku} · ${item.productType} · ${item.size} · ${item.color}${item.hookSize ? ' · ' + item.hookSize : ''}</td>
     </tr>`;
   });
 
-  return notesRow + bulkBar + `<div class="table-wrap"><table>
+  return notesRow + bulkBar + `<div class="table-wrap"><table class="order-detail-table">
     <thead><tr>
       <th>SKU</th><th>Product</th><th>Size</th><th>Color</th><th>Hook</th>
-      <th>Qty</th><th class="col-components">Components</th><th>Status</th>
+      <th>Qty</th><th class="col-components">Components</th><th>Status</th><th style="display:none"></th>
     </tr></thead>
     <tbody>
       ${itemRows}
-      <tr style="border-top:2px solid #1a3050">
-        <td colspan="5" style="color:#8aadcf;font-size:10px;letter-spacing:1px;text-transform:uppercase">Total Components</td>
+      <tr class="odt-total-row" style="border-top:2px solid #1a3050">
+        <td colspan="5" style="color:#8aadcf;font-size:10px;letter-spacing:1px;text-transform:uppercase">Total</td>
         <td class="num">${totalQty}</td>
         <td class="muted col-components" style="font-size:11px">${summaryLine}</td>
         <td></td>
+        <td style="display:none"></td>
       </tr>
     </tbody>
   </table></div>`;
@@ -3746,20 +3780,27 @@ function renderOrderCard(order) {
     : '';
 
   return `<div id="order-card-${order.id}" style="margin-bottom:12px">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:#0e1f30;border:1px solid #1a3050;border-radius:4px;cursor:pointer" onclick="toggleOrderDetails('${order.id}')">
-      <input type="checkbox" id="chk-${order.id}" style="cursor:pointer" onclick="event.stopPropagation()">
-      <span style="color:#c9a227;font-size:13px;font-weight:bold;letter-spacing:2px">${order.shop.toUpperCase()}</span>
-      <span class="muted">Due: ${order.dueDate}</span>
-      ${statusBadge}${dueBadge}${fulfillBadge}
-      <span class="muted" style="font-size:12px">${totalQty} heads · ${skuCount} SKU${skuCount !== 1 ? 's' : ''}</span>
-      ${notesSnip}
-      <span style="flex:1"></span>
-      <button id="order-toggle-${order.id}" class="btn btn-sm" onclick="event.stopPropagation();toggleOrderDetails('${order.id}')">▼ Details</button>
-      <button class="btn btn-sm" onclick="event.stopPropagation();printOrder('${order.id}')">🖨 Print</button>
-      ${shipBtn}
-      <button class="btn btn-sm" onclick="event.stopPropagation();duplicateOrder('${order.id}')" title="Clone this order">⧉ Dup</button>
-      <button class="btn btn-sm" onclick="event.stopPropagation();archiveOrder('${order.id}')" title="Move to archive">📦</button>
-      <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder('${order.id}')">Delete</button>
+    <div class="order-card-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:#0e1f30;border:1px solid #1a3050;border-radius:4px;cursor:pointer" onclick="toggleOrderDetails('${order.id}')">
+      <div class="oc-row1">
+        <input type="checkbox" id="chk-${order.id}" style="cursor:pointer" onclick="event.stopPropagation()">
+        <span style="color:#c9a227;font-size:13px;font-weight:bold;letter-spacing:2px">${order.shop.toUpperCase()}</span>
+        ${statusBadge}${dueBadge}${fulfillBadge}
+      </div>
+      <div class="oc-row2">
+        <span class="muted" style="font-size:12px">${totalQty} heads · ${skuCount} SKU${skuCount !== 1 ? 's' : ''}</span>
+        <span class="muted">Due: ${order.dueDate}</span>
+        ${notesSnip}
+        <span style="flex:1"></span>
+      </div>
+      <div class="oc-row3">
+        <button id="order-toggle-${order.id}" class="btn btn-sm" onclick="event.stopPropagation();toggleOrderDetails('${order.id}')">▼ Details</button>
+        ${pourBtn}
+        ${shipBtn}
+        <button class="btn btn-sm" onclick="event.stopPropagation();printOrder('${order.id}')">🖨</button>
+        <button class="btn btn-sm" onclick="event.stopPropagation();duplicateOrder('${order.id}')" title="Clone this order">⧉</button>
+        <button class="btn btn-sm" onclick="event.stopPropagation();archiveOrder('${order.id}')" title="Move to archive">📦</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder('${order.id}')">✕</button>
+      </div>
     </div>
     <div id="order-details-${order.id}" style="display:none">
       ${renderOrderDetailsContent(order)}
