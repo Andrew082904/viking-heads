@@ -1419,6 +1419,43 @@ function applyMigrations(d) {
     });
     d._seededFishermans92647 = true;
   }
+  // Migration: seed TackleCave order (03/20/26)
+  if (!d._seededTackleCave0320) {
+    const tcItems = [
+      { sku:'VKS14MT',    qty:5  }, { sku:'VKS14BB',    qty:20 },
+      { sku:'VKS14RED',   qty:20 },
+      { sku:'VKS38CMDO',  qty:10 }, { sku:'VKS38RED',   qty:10 },
+      { sku:'VKS382MT',   qty:20 },
+      { sku:'VKS12GD',    qty:15 }, { sku:'VKS12BF',    qty:15 },
+      { sku:'VKS12RED',   qty:15 }, { sku:'VKS122MT',   qty:10 },
+      { sku:'VKS34BF',    qty:15 }, { sku:'VKS34MT',    qty:10 },
+      { sku:'VKS34RED',   qty:10 },
+      { sku:'VKS1RED',    qty:10 }, { sku:'VKS1CMDO',   qty:10 },
+      { sku:'UPPC12',     qty:20 },
+      { sku:'VKRFPBF',    qty:5  },
+    ].map(({ sku, qty }) => {
+      const def = SKU_TABLE[sku];
+      if (!def) return null;
+      const heads = qty * (HEADS_PER_BAG[def.productType] || 1);
+      return {
+        sku, productType: def.productType, size: def.size, color: def.color,
+        hookSize: def.hookSize, hookKey: def.hookKey, quantity: qty,
+        components: calcDeductionsForSku(def, heads),
+        itemStatus: { poured: false, loaded: false, painted: false },
+      };
+    }).filter(Boolean);
+    d.orders.unshift({
+      id: 'tacklecave_0320',
+      shop: 'TackleCave',
+      dueDate: '2026-04-21',
+      notes: 'Finesse heads excluded — unknown hook size (Purple BF 15, Blue BF 20, Shad 20). Bing Bong finesse excluded — does not exist. Schrounger heads excluded — not in catalog.',
+      createdAt: '2026-03-20T00:00:00.000Z',
+      status: 'pending',
+      archived: false,
+      items: tcItems,
+    });
+    d._seededTackleCave0320 = true;
+  }
   // Migration: recalculate order item components using bags→heads conversion
   if (!d._migratedBagComponents) {
     d.orders.forEach(order => {
