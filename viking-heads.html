@@ -467,7 +467,8 @@
     }
 
     /* ---- Mobile Dashboard ---- */
-    .dash-scroll-box { max-height: 55vh; overflow-y: auto; }
+    .dash-scroll-box { max-height: 55vh; overflow-y: auto; scrollbar-width: none; }
+    .dash-scroll-box::-webkit-scrollbar { display: none; }
     @media (max-width: 600px) {
       .dash-grid { grid-template-columns: 1fr !important; }
       .dash-scroll-box { max-height: 40vh; }
