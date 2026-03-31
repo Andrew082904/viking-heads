@@ -1605,7 +1605,7 @@ function showShopDetail(shop) {
       </div>
       <div style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap">
         <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Total Orders</span><div style="font-size:20px;color:#c9d8e8">${orders.length}</div></div>
-        <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Total Heads</span><div style="font-size:20px;color:#c9a227">${totalHeads}</div></div>
+        <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Total Bags</span><div style="font-size:20px;color:#c9a227">${totalHeads}</div></div>
         <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">First Order</span><div style="font-size:14px;color:#c9d8e8">${fmtDate(orders[orders.length - 1].createdAt)}</div></div>
         <div><span class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:1px">Last Order</span><div style="font-size:14px;color:#c9d8e8">${fmtDate(orders[0].createdAt)}</div></div>
       </div>`;
@@ -4250,7 +4250,7 @@ function renderCombinedView(skuAgg, orders, existingBundleId) {
     <div style="display:flex;gap:24px;margin-bottom:20px;flex-wrap:wrap">
       <span class="muted">Shops: <span style="color:#e8e8e8">${shopNames}</span></span>
       <span class="muted">Due Dates: <span style="color:#e8e8e8">${dueDates}</span></span>
-      <span class="muted">Total Heads: <span style="color:#c9a227;font-weight:bold;font-size:16px">${grandQty}</span></span>
+      <span class="muted">Total Bags: <span style="color:#c9a227;font-weight:bold;font-size:16px">${grandQty}</span></span>
     </div>
 
     <!-- Head Count Summary Cards -->
@@ -4372,7 +4372,7 @@ function printOrder(orderId) {
       <strong>Shop:</strong> ${order.shop} &nbsp;&nbsp;
       <strong>Due:</strong> ${order.dueDate} &nbsp;&nbsp;
       <strong>Status:</strong> ${order.status.toUpperCase()} &nbsp;&nbsp;
-      <strong>Total Heads:</strong> ${totalQty}
+      <strong>Total Bags:</strong> ${totalQty}
     </p>
     <table>
       <thead><tr>
@@ -4462,7 +4462,7 @@ function _printCombinedData(skuAgg, orders) {
     <p style="margin:0 0 12px;color:#555">
       <strong>Shops:</strong> ${shopNames} &nbsp;&nbsp;
       <strong>Due:</strong> ${dueDates} &nbsp;&nbsp;
-      <strong>Total Heads:</strong> ${grandQty}
+      <strong>Total Bags:</strong> ${grandQty}
     </p>
     ${summaryBlock}
     <table>
