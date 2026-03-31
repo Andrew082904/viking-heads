@@ -3769,7 +3769,7 @@ function renderOrders() {
       html += `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 14px;background:#0a1520;border:1px solid #1a2a3a;border-radius:4px;margin-bottom:6px;opacity:.75">
         <span style="color:#5a7a9a;font-weight:bold">${order.shop.toUpperCase()}</span>
         <span class="muted" style="font-size:12px">Due: ${order.dueDate}</span>
-        <span class="muted" style="font-size:12px">${totalQty} heads · ${order.items.length} SKUs</span>
+        <span class="muted" style="font-size:12px">${totalQty} bags · ${order.items.length} SKUs</span>
         <span style="flex:1"></span>
         <button class="btn btn-sm" onclick="unarchiveOrder('${order.id}')">↩ Restore</button>
         <button class="btn btn-danger btn-sm" onclick="deleteOrder('${order.id}')">Delete</button>
@@ -3785,7 +3785,7 @@ function renderOrders() {
     data.bundles.forEach(bundle => {
       html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:#0e1f30;border:1px solid #1a3050;border-radius:4px;margin-bottom:8px;flex-wrap:wrap">
         <span style="color:#c9a227;font-weight:bold">${bundle.name}</span>
-        <span class="muted" style="font-size:12px">${bundle.totalHeads} heads · ${bundle.skuCount} SKUs · ${bundle.orderCount} orders</span>
+        <span class="muted" style="font-size:12px">${bundle.totalHeads} bags · ${bundle.skuCount} SKUs · ${bundle.orderCount} orders</span>
         <span class="muted" style="font-size:11px">Created: ${fmtDate(bundle.createdAt)}</span>
         <span style="flex:1"></span>
         <button class="btn btn-sm" onclick="openBundle('${bundle.id}')">View</button>
@@ -3978,7 +3978,7 @@ function renderOrderCard(order) {
         ${statusBadge}${dueBadge}${fulfillBadge}
       </div>
       <div class="oc-row2">
-        <span class="muted" style="font-size:12px">${totalQty} heads · ${skuCount} SKU${skuCount !== 1 ? 's' : ''}</span>
+        <span class="muted" style="font-size:12px">${totalQty} bags · ${skuCount} SKU${skuCount !== 1 ? 's' : ''}</span>
         <span class="muted">Due: ${order.dueDate}</span>
         ${notesSnip}
         <span style="flex:1"></span>
