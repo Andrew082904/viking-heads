@@ -1382,6 +1382,43 @@ function applyMigrations(d) {
     });
     d._seededTW194394 = true;
   }
+  // Migration: seed Fishermen's Hardware PO#92647 (03/30/26)
+  if (!d._seededFishermans92647) {
+    const fhItems = [
+      { sku:'VKS14BF',    qty:12 }, { sku:'VKS38BF',    qty:12 },
+      { sku:'VKS14BB',    qty:18 }, { sku:'VKS38BB',    qty:18 },
+      { sku:'VKS12BB',    qty:18 },
+      { sku:'VKS14CMDO',  qty:12 }, { sku:'VKS38CMDO',  qty:12 },
+      { sku:'VKS12CMDO',  qty:12 },
+      { sku:'VKS14GD',    qty:18 }, { sku:'VKS38GD',    qty:18 },
+      { sku:'VKS12GD',    qty:18 },
+      { sku:'VKS14MT',    qty:12 }, { sku:'VKS382MT',   qty:12 },
+      { sku:'VKS122MT',   qty:12 },
+      { sku:'VKS14RED',   qty:12 }, { sku:'VKS38RED',   qty:12 },
+      { sku:'VKS12RED',   qty:12 },
+    ].map(({ sku, qty }) => {
+      const def = SKU_TABLE[sku];
+      if (!def) return null;
+      const heads = qty * (HEADS_PER_BAG[def.productType] || 1);
+      return {
+        sku, productType: def.productType, size: def.size, color: def.color,
+        hookSize: def.hookSize, hookKey: def.hookKey, quantity: qty,
+        components: calcDeductionsForSku(def, heads),
+        itemStatus: { poured: false, loaded: false, painted: false },
+      };
+    }).filter(Boolean);
+    d.orders.unshift({
+      id: 'fishermans_92647',
+      shop: "Fishermen's Hardware",
+      dueDate: '2026-04-20',
+      notes: 'PO#92647 — Net 30',
+      createdAt: '2026-03-30T00:00:00.000Z',
+      status: 'pending',
+      archived: false,
+      items: fhItems,
+    });
+    d._seededFishermans92647 = true;
+  }
   // Migration: recalculate order item components using bags→heads conversion
   if (!d._migratedBagComponents) {
     d.orders.forEach(order => {
