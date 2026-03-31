@@ -4239,9 +4239,9 @@ function toggleItemStatus(orderId, itemIdx, field) {
   if (order.status !== oldStatus) {
     const badge = document.getElementById('order-status-' + orderId);
     if (badge) {
-      const colors = { pending: '#3a5a7a', partial: '#c9a227', poured: '#4caf7d', shipped: '#4a9ae8' };
+      const colors = { pending: '#e8a020', partial: '#e8a870', poured: '#4caf7d', shipped: '#4a9ae8' };
       badge.textContent = order.status.toUpperCase();
-      badge.style.background = colors[order.status] || '#3a5a7a';
+      badge.style.color = colors[order.status] || '#e8a020';
     }
   }
   // Update the clicked segment's color
