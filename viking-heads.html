@@ -829,7 +829,7 @@
   <div class="page-header">
     <div class="page-title">Import</div>
     <button class="btn" onclick="triggerOrderImport()">Import File / Image</button>
-    <button class="btn btn-gold" onclick="openClaudeProcess()">🤖 Process with Claude</button>
+    <button class="btn btn-gold" onclick="openPasteOrder()">📋 Paste Order JSON</button>
     <button class="btn" onclick="toggleSkuReference()">SKU Reference</button>
     <button class="btn" onclick="showReorderList()">🛒 Reorder List</button>
     <button class="btn" onclick="exportOrdersCsv()">⬇ Export CSV</button>
@@ -4985,249 +4985,111 @@ async function startWithAuthGate() {
 }
 
 // ============================================================
-// PROCESS WITH CLAUDE — parse orders from text/files using Opus
+// PASTE ORDER JSON — quick-add orders from Claude Code session
 // ============================================================
 
-// Known customer shop names (for Claude's context when parsing orders)
-const KNOWN_SHOP_NAMES = [
-  'Reel Addiction', 'Tackle Warehouse', "Turner's Outdoorsman", 'Fishermans Access',
-  "Johnny's Sport Shop", 'Performance Tackle', "Angler's Choice", 'Melton Tackle',
-  'BigFish Bait', 'TackleCave', 'The Longfin', 'Chaeil Fishing', 'H&M Landing',
-  'Pacific Coast B&T', 'Tyler Wrap Co',
-];
 
-
-// Build SKU catalog string for Claude prompts
-function _buildSkuCatalog() {
-  return Object.entries(SKU_TABLE).map(([sku, info]) => {
-    const parts = [sku, info.productType, info.size];
-    if (info.hookSize) parts.push(`hook ${info.hookSize}`);
-    parts.push(info.color);
-    return parts.join(' | ');
-  }).join('\n');
-}
-
-function openClaudeProcess() {
-  let modal = document.getElementById('claude-process-modal');
+function openPasteOrder() {
+  let modal = document.getElementById('paste-order-modal');
   if (modal) modal.remove();
   modal = document.createElement('div');
-  modal.id = 'claude-process-modal';
+  modal.id = 'paste-order-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px';
   modal.innerHTML = `
     <div style="background:#0e1f30;border:1px solid #1a3050;border-radius:6px;padding:24px;max-width:720px;width:100%;max-height:90vh;overflow-y:auto">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-        <div class="page-title">🤖 Process Order with Claude</div>
+        <div class="page-title">📋 Paste Order JSON</div>
         <span style="flex:1"></span>
-        <button class="btn btn-sm" onclick="document.getElementById('claude-process-modal').remove()">✕ Close</button>
+        <button class="btn btn-sm" onclick="document.getElementById('paste-order-modal').remove()">✕ Close</button>
+      </div>
+      <div style="margin-bottom:10px;color:#5a7a9a;font-size:12px">
+        Paste the JSON from your Claude Code session. Format:<br>
+        <code style="color:#c9a227;font-size:11px">{"shop":"Shop Name","notes":"","items":[{"sku":"VKS12CMDO","qty":50}]}</code>
       </div>
       <div style="margin-bottom:14px">
-        <label style="display:block;margin-bottom:6px;color:#8aadcf;font-size:11px;letter-spacing:1px;text-transform:uppercase">Paste order text (email, text message, etc.)</label>
-        <textarea id="claude-order-text" rows="8" style="width:100%;background:#091a28;border:1px solid #1a3050;color:#c9d8e8;padding:10px;font-size:13px;border-radius:4px;resize:vertical" placeholder="Paste the order email, text message, or any order info here…"></textarea>
+        <textarea id="paste-order-json" rows="10" style="width:100%;background:#091a28;border:1px solid #1a3050;color:#c9d8e8;padding:10px;font-family:monospace;font-size:13px;border-radius:4px;resize:vertical" placeholder='Paste JSON here…'></textarea>
       </div>
-      <div style="margin-bottom:14px">
-        <label style="display:block;margin-bottom:6px;color:#8aadcf;font-size:11px;letter-spacing:1px;text-transform:uppercase">Attach files (images, PDFs, spreadsheets)</label>
-        <input type="file" id="claude-order-files" multiple accept="image/*,.pdf,.xlsx,.xls,.csv,.txt" style="color:#5a7a9a;font-size:13px">
+      <div id="paste-order-preview" style="margin-bottom:14px"></div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-gold" onclick="submitPastedOrder()">Add to Orders</button>
+        <button class="btn" onclick="editPastedOrder()">Edit First</button>
+        <button class="btn" onclick="document.getElementById('paste-order-modal').remove()">Cancel</button>
       </div>
-      <div style="display:flex;gap:10px;align-items:center">
-        <button class="btn btn-gold" onclick="runClaudeProcess()" id="claude-process-btn">Process Order</button>
-        <span id="claude-process-status" style="font-size:12px;color:#5a7a9a"></span>
-      </div>
-      <div id="claude-process-result" style="margin-top:16px"></div>
     </div>`;
   document.body.appendChild(modal);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-  document.getElementById('claude-order-text').focus();
+
+  const textarea = document.getElementById('paste-order-json');
+  textarea.focus();
+  textarea.addEventListener('input', () => previewPastedOrder());
 }
 
-async function runClaudeProcess() {
-  const text  = document.getElementById('claude-order-text').value.trim();
-  const files = Array.from(document.getElementById('claude-order-files').files || []);
-  if (!text && !files.length) {
-    showToast('Paste some order text or attach a file', 'error');
-    return;
-  }
-
-  const btn    = document.getElementById('claude-process-btn');
-  const status = document.getElementById('claude-process-status');
-  const result = document.getElementById('claude-process-result');
-  btn.disabled = true;
-  btn.textContent = 'Processing…';
-  status.textContent = 'Sending to Claude Opus…';
-  result.innerHTML = '';
-
-  const ANTHROPIC_API_KEY = getAnthropicKey();
-  if (!ANTHROPIC_API_KEY) {
-    btn.disabled = false; btn.textContent = 'Process Order'; status.textContent = '';
-    return;
-  }
-
+function _parsePasteOrderJSON() {
+  const raw = (document.getElementById('paste-order-json')?.value || '').trim();
+  if (!raw) return null;
   try {
-    const skuCatalog = _buildSkuCatalog();
-    const shopList   = KNOWN_SHOP_NAMES.join(', ');
-
-    // Build message content array
-    const content = [];
-
-    // Add file contents (images, PDFs as base64; spreadsheets as CSV text)
-    for (const file of files) {
-      const name = file.name.toLowerCase();
-      if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
-        if (typeof XLSX !== 'undefined') {
-          const buffer = await file.arrayBuffer();
-          const wb     = XLSX.read(buffer, { type: 'array' });
-          const ws     = wb.Sheets[wb.SheetNames[0]];
-          const csv    = XLSX.utils.sheet_to_csv(ws);
-          content.push({ type: 'text', text: `[Spreadsheet: ${file.name}]\n${csv.slice(0, 12000)}` });
-        }
-      } else if (name.endsWith('.csv') || name.endsWith('.txt')) {
-        const fileText = await file.text();
-        content.push({ type: 'text', text: `[File: ${file.name}]\n${fileText.slice(0, 12000)}` });
-      } else if (file.type === 'application/pdf' || name.endsWith('.pdf')) {
-        const base64 = await fileToBase64(file);
-        content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } });
-      } else if (file.type.startsWith('image/')) {
-        const base64   = await fileToBase64(file);
-        const mimeType = ['image/jpeg','image/png','image/gif','image/webp'].includes(file.type) ? file.type : 'image/jpeg';
-        content.push({ type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } });
-      }
-    }
-
-    // Add the text prompt with all context
-    content.push({
-      type: 'text',
-      text: `You are an order processor for Viking Heads, a fishing jig manufacturer. Parse the order information provided and extract all details.
-
-PRODUCT TYPE PREFIXES — do NOT mix these up:
-- VKS = Swinghead (swinging-hook jig head)
-- VKH = VK Head (fixed-hook jig head — DIFFERENT from Swinghead)
-- VFH = Finesse Head
-- VKWGH = Weedguard Head
-
-SKU CATALOG (SKU | Product Type | Size | Hook | Color):
-${skuCatalog}
-
-KNOWN CUSTOMERS: ${shopList}
-
-ORDER INFORMATION:
-${text || '(See attached file(s))'}
-
-INSTRUCTIONS:
-1. Identify the shop/customer name. Match to a known customer if possible.
-2. Extract every order line item — match products to SKUs from the catalog.
-3. Fix minor typos, spacing issues, or partial SKU matches.
-4. If quantity is in packs/bags, use that number directly.
-5. Skip totals, notes, shipping rows, invoice headers.
-
-Return ONLY valid JSON — no other text:
-{"shop":"Shop Name","notes":"any relevant notes from the order","items":[{"sku":"VKS12CMDO","qty":50},{"sku":"VFH1820BBF","qty":24}]}
-
-If nothing found, return: {"shop":"","notes":"","items":[]}`,
-    });
-
-    status.textContent = 'Claude is thinking…';
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type':      'application/json',
-        'x-api-key':         ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta':    'interleaved-thinking-2025-05-14',
-      },
-      body: JSON.stringify({
-        model:      'claude-opus-4-6',
-        max_tokens: 16000,
-        thinking:   { type: 'enabled', budget_tokens: 10000 },
-        messages:   [{ role: 'user', content }],
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error?.message || `API error ${response.status}`);
-    }
-
-    const data    = await response.json();
-    // Extract the text block (skip thinking blocks)
-    const textBlock = data.content?.find(b => b.type === 'text');
-    const raw     = textBlock?.text?.trim() || '{}';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Could not parse Claude response');
-
+    if (!jsonMatch) return null;
     const parsed = JSON.parse(jsonMatch[0]);
-    if (!parsed.items || !parsed.items.length) {
-      result.innerHTML = '<div style="color:#e87070;padding:12px">No order items found. Try providing more detail.</div>';
-      return;
-    }
-
-    // Validate SKUs
-    const validItems = [];
-    const unknownItems = [];
-    parsed.items.forEach(item => {
-      const sku = (item.sku || '').toUpperCase();
-      const qty = Math.max(1, parseInt(item.qty) || 1);
-      if (SKU_TABLE[sku]) {
-        validItems.push({ sku, qty });
-      } else {
-        // Fuzzy match
-        const clean = sku.replace(/[\s\-_.]/g, '');
-        const fuzzy = Object.keys(SKU_TABLE).find(k => k.replace(/[\s\-_.]/g, '') === clean);
-        if (fuzzy) validItems.push({ sku: fuzzy, qty });
-        else unknownItems.push({ sku, qty });
-      }
-    });
-
-    // Show results for review
-    const shopName = parsed.shop || '';
-    const notes    = parsed.notes || '';
-    let html = `<div style="border:1px solid #1a3050;border-radius:4px;padding:14px;background:#091a28">
-      <div style="color:#c9a227;font-weight:bold;margin-bottom:10px">Order Preview</div>
-      <div style="margin-bottom:8px"><span class="muted">Shop:</span> <strong style="color:#c9d8e8">${esc(shopName || '(unknown)')}</strong></div>
-      ${notes ? `<div style="margin-bottom:8px"><span class="muted">Notes:</span> <span style="color:#c9d8e8">${esc(notes)}</span></div>` : ''}
-      <table style="width:100%;margin-bottom:12px">
-        <thead><tr><th style="text-align:left">SKU</th><th style="text-align:left">Product</th><th style="text-align:right">Qty</th></tr></thead>
-        <tbody>`;
-    validItems.forEach(({ sku, qty }) => {
-      const info = SKU_TABLE[sku];
-      html += `<tr>
-        <td style="color:#c9a227;font-size:12px">${sku}</td>
-        <td style="font-size:12px">${info.productType} ${info.size} ${info.color}${info.hookSize ? ' ' + info.hookSize : ''}</td>
-        <td style="text-align:right;font-size:12px">${qty}</td>
-      </tr>`;
-    });
-    html += '</tbody></table>';
-
-    if (unknownItems.length) {
-      html += `<div style="color:#e87070;font-size:12px;margin-bottom:8px">⚠ ${unknownItems.length} unrecognized SKU(s) skipped: ${unknownItems.map(i => i.sku).join(', ')}</div>`;
-    }
-
-    html += `<div style="display:flex;gap:10px;margin-top:10px">
-      <button class="btn btn-gold" onclick="_acceptClaudeOrder()">Add to Orders</button>
-      <button class="btn" onclick="_editClaudeOrder()">Edit First</button>
-      <button class="btn" onclick="document.getElementById('claude-process-modal').remove()">Cancel</button>
-    </div></div>`;
-
-    result.innerHTML = html;
-
-    // Stash parsed data for accept/edit
-    window._claudeOrderParsed = { shop: shopName, notes, items: validItems };
-
-  } catch (err) {
-    result.innerHTML = `<div style="color:#e87070;padding:12px">Error: ${esc(err.message)}</div>`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Process Order';
-    status.textContent = '';
-  }
+    if (!parsed.items || !Array.isArray(parsed.items)) return null;
+    return parsed;
+  } catch { return null; }
 }
 
-function _acceptClaudeOrder() {
-  const parsed = window._claudeOrderParsed;
-  if (!parsed || !parsed.items.length) return;
+function _resolveOrderItems(parsed) {
+  const valid = [], unknown = [];
+  parsed.items.forEach(item => {
+    const sku = (item.sku || '').toUpperCase();
+    const qty = Math.max(1, parseInt(item.qty) || 1);
+    if (SKU_TABLE[sku]) { valid.push({ sku, qty }); return; }
+    const clean = sku.replace(/[\s\-_.]/g, '');
+    const fuzzy = Object.keys(SKU_TABLE).find(k => k.replace(/[\s\-_.]/g, '') === clean);
+    if (fuzzy) valid.push({ sku: fuzzy, qty });
+    else unknown.push({ sku, qty });
+  });
+  return { valid, unknown };
+}
 
-  const data = load();
+function previewPastedOrder() {
+  const preview = document.getElementById('paste-order-preview');
+  const parsed  = _parsePasteOrderJSON();
+  if (!parsed) { preview.innerHTML = ''; return; }
+
+  const { valid, unknown } = _resolveOrderItems(parsed);
+  if (!valid.length && !unknown.length) { preview.innerHTML = ''; return; }
+
+  let html = `<div style="border:1px solid #1a3050;border-radius:4px;padding:12px;background:#091a28">
+    <div style="margin-bottom:6px"><span class="muted">Shop:</span> <strong style="color:#c9d8e8">${esc(parsed.shop || '(unknown)')}</strong></div>
+    ${parsed.notes ? `<div style="margin-bottom:6px"><span class="muted">Notes:</span> <span style="color:#c9d8e8">${esc(parsed.notes)}</span></div>` : ''}
+    <table style="width:100%">
+      <thead><tr><th style="text-align:left">SKU</th><th style="text-align:left">Product</th><th style="text-align:right">Qty</th></tr></thead>
+      <tbody>`;
+  valid.forEach(({ sku, qty }) => {
+    const info = SKU_TABLE[sku];
+    html += `<tr>
+      <td style="color:#c9a227;font-size:12px">${sku}</td>
+      <td style="font-size:12px">${info.productType} ${info.size} ${info.color}${info.hookSize ? ' ' + info.hookSize : ''}</td>
+      <td style="text-align:right;font-size:12px">${qty}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  if (unknown.length) {
+    html += `<div style="color:#e87070;font-size:12px;margin-top:6px">⚠ Unknown: ${unknown.map(i => i.sku).join(', ')}</div>`;
+  }
+  html += '</div>';
+  preview.innerHTML = html;
+}
+
+function submitPastedOrder() {
+  const parsed = _parsePasteOrderJSON();
+  if (!parsed) { showToast('Invalid JSON — check format', 'error'); return; }
+
+  const { valid } = _resolveOrderItems(parsed);
+  if (!valid.length) { showToast('No valid SKUs found', 'error'); return; }
+
+  const data  = load();
   const items = [];
-  parsed.items.forEach(({ sku, qty }) => {
+  valid.forEach(({ sku, qty }) => {
     const def = SKU_TABLE[sku];
     if (!def) return;
     const heads = qty * (HEADS_PER_BAG[def.productType] || 1);
@@ -5239,17 +5101,13 @@ function _acceptClaudeOrder() {
     });
   });
 
-  if (!items.length) { showToast('No valid items to add', 'error'); return; }
-
-  // Default due date: 14 days from now
   const due = new Date();
   due.setDate(due.getDate() + 14);
-  const dueDate = due.toISOString().split('T')[0];
 
   data.orders.unshift({
     id:        Date.now().toString(36) + Math.random().toString(36).slice(2),
     shop:      parsed.shop || 'Unknown Shop',
-    dueDate,
+    dueDate:   due.toISOString().split('T')[0],
     notes:     parsed.notes || '',
     createdAt: new Date().toISOString(),
     status:    'pending',
@@ -5258,27 +5116,27 @@ function _acceptClaudeOrder() {
   });
   save(data);
 
-  document.getElementById('claude-process-modal')?.remove();
-  window._claudeOrderParsed = null;
+  document.getElementById('paste-order-modal')?.remove();
   showToast(`Order added: ${parsed.shop || 'Unknown Shop'} — ${items.length} SKU(s)`);
   renderOrders();
 }
 
-function _editClaudeOrder() {
-  const parsed = window._claudeOrderParsed;
-  if (!parsed) return;
+function editPastedOrder() {
+  const parsed = _parsePasteOrderJSON();
+  if (!parsed) { showToast('Invalid JSON — check format', 'error'); return; }
 
-  document.getElementById('claude-process-modal')?.remove();
-  window._claudeOrderParsed = null;
+  const { valid } = _resolveOrderItems(parsed);
+  if (!valid.length) { showToast('No valid SKUs found', 'error'); return; }
 
-  // Open the order form pre-filled
+  document.getElementById('paste-order-modal')?.remove();
+
   if (!orderFormOpen) {
     orderFormOpen = true;
     document.getElementById('order-form-wrap').style.display = 'block';
   }
-  buildOrderForm({ shop: parsed.shop, notes: parsed.notes });
-  populateOrderFormRows(parsed.items);
-  showToast(`${parsed.items.length} SKU(s) loaded into form — review and submit`);
+  buildOrderForm({ shop: parsed.shop || '', notes: parsed.notes || '' });
+  populateOrderFormRows(valid);
+  showToast(`${valid.length} SKU(s) loaded into form — review and submit`);
 }
 
 
