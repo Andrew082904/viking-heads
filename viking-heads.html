@@ -116,6 +116,8 @@
       padding: 11px 18px;
       text-transform: uppercase;
       transition: color 0.12s, border-color 0.12s;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     nav button:hover { color: #c9d8e8; }
     nav button.active { color: #c9a227; border-bottom-color: #c9a227; }
@@ -221,6 +223,60 @@
       padding: 28px 0;
       text-align: center;
     }
+
+    /* ── Alerts: per-type threshold fields ── */
+    .threshold-fields { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .threshold-field { display: flex; flex-direction: column; gap: 4px; }
+    .threshold-field span { color: #5a7a9a; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; }
+    .threshold-field input[type="number"] { width: 80px; }
+
+    /* ── Alerts: section headers ── */
+    .alerts-section-title {
+      color: #8aadcf; font-size: 10px; letter-spacing: 2px;
+      text-transform: uppercase; margin: 24px 0 12px;
+    }
+    .alerts-section-title:first-child { margin-top: 0; }
+
+    /* ── Alerts: severity badges ── */
+    .severity-critical { background: #4a0d0d; border: 1px solid #c04040; color: #f09090; border-radius: 3px; font-size: 10px; padding: 2px 8px; letter-spacing: 0.8px; white-space: nowrap; }
+    .severity-low { background: #2e1400; border: 1px solid #9a5020; color: #e09050; border-radius: 3px; font-size: 10px; padding: 2px 8px; letter-spacing: 0.8px; white-space: nowrap; }
+    .severity-warning { background: #2a2200; border: 1px solid #8a7a20; color: #d8c860; border-radius: 3px; font-size: 10px; padding: 2px 8px; letter-spacing: 0.8px; white-space: nowrap; }
+
+    /* ── Alerts: collapsible groups ── */
+    .alert-group { background: #0e1f30; border: 1px solid #1a3050; border-radius: 6px; margin-bottom: 10px; }
+    .alert-group-header {
+      display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+      cursor: pointer; user-select: none;
+    }
+    .alert-group-header:hover { background: #122538; border-radius: 6px; }
+    .alert-group-chevron { color: #5a7a9a; font-size: 12px; transition: transform 0.15s; }
+    .alert-group.collapsed .alert-group-chevron { transform: rotate(-90deg); }
+    .alert-group-title { color: #c9a227; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
+    .alert-group-body { padding: 0 16px 12px; }
+    .alert-group.collapsed .alert-group-body { display: none; }
+    .alert-group-body table { margin-bottom: 0; }
+
+    /* ── Alerts: demand cards ── */
+    .demand-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+    .demand-card {
+      background: #0e1f30; border: 1px solid #1a3050; border-radius: 4px; padding: 12px 14px;
+    }
+    .demand-card.surplus { border-color: #1a5030; }
+    .demand-card.shortfall { border-color: #5a2020; }
+    .demand-card-label { color: #5a7a9a; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; }
+    .demand-card-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 2px; }
+    .demand-card-row .val { font-weight: bold; }
+
+    /* ── Alerts: order alert cards ── */
+    .order-alert-card {
+      padding: 10px 14px; background: #0e1f30; border: 1px solid #1a3050;
+      border-radius: 4px; margin-bottom: 6px;
+    }
+    .order-alert-card.overdue { background: #1a0808; border-color: #5a2020; }
+    .order-alert-card.due-soon { background: #1a1400; border-color: #4a3a00; }
+    .order-alert-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .order-alert-shop { color: #c9a227; font-weight: bold; letter-spacing: 1px; }
+    .order-alert-detail { color: #5a7a9a; font-size: 11px; margin-top: 4px; line-height: 1.5; }
 
     .empty-row td {
       color: #3a5a7a;
@@ -358,17 +414,25 @@
       -webkit-overflow-scrolling: touch;
     }
 
-    /* RESPONSIVE — nav scrolls horizontally on small screens */
+    /* RESPONSIVE — nav scrolls horizontally */
     nav {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
       flex-wrap: nowrap;
-      scrollbar-width: none;
+      scrollbar-width: thin;
+      scrollbar-color: #1a3050 #091526;
       position: sticky;
       top: 0;
       z-index: 100;
     }
-    nav::-webkit-scrollbar { display: none; }
+    nav::-webkit-scrollbar { height: 3px; }
+    nav::-webkit-scrollbar-track { background: #091526; }
+    nav::-webkit-scrollbar-thumb { background: #1a3050; border-radius: 2px; }
+
+    @media (max-width: 768px) {
+      nav { scrollbar-width: none; }
+      nav::-webkit-scrollbar { display: none; }
+    }
 
     /* RESPONSIVE — tablet & phone */
     @media (max-width: 768px) {
@@ -502,7 +566,7 @@
 <body>
 
 <!-- LOGIN OVERLAY -->
-<div id="login-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:#050f1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+<div id="login-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:#050f1a;flex-direction:column;align-items:center;justify-content:center;gap:16px">
   <div style="font-size:22px;font-weight:700;color:#c8a84b;letter-spacing:2px">VIKING HEADS</div>
   <div style="font-size:13px;color:#5a7a9a;margin-bottom:8px">Sign in to continue</div>
   <input id="login-email" type="email" placeholder="Email" autocomplete="username"
@@ -547,7 +611,6 @@
 <div id="page-swingheads" class="page">
   <div class="page-header">
     <div class="page-title">Swingheads</div>
-    <button class="btn btn-gold" onclick="togglePourForm('swingheads')">+ Log Pour</button>
   </div>
   <div id="sh-form-wrap" style="display:none"></div>
   <div id="sh-table"></div>
@@ -557,7 +620,6 @@
 <div id="page-finesse" class="page">
   <div class="page-header">
     <div class="page-title">Finesse Heads</div>
-    <button class="btn btn-gold" onclick="togglePourForm('finesse')">+ Log Pour</button>
   </div>
   <div id="fh-form-wrap" style="display:none"></div>
   <div id="fh-table"></div>
@@ -567,7 +629,6 @@
 <div id="page-vkhead" class="page">
   <div class="page-header">
     <div class="page-title">VK-Head</div>
-    <button class="btn btn-gold" onclick="toggleGenericForm('vkhead')">Log Pour</button>
   </div>
 
   <div id="vkhead-form-wrap" style="display:none"></div>
@@ -578,7 +639,6 @@
 <div id="page-weedguard" class="page">
   <div class="page-header">
     <div class="page-title">VK-Weedguard Head</div>
-    <button class="btn btn-gold" onclick="toggleGenericForm('weedguard')">Log Pour</button>
   </div>
 
   <div id="weedguard-form-wrap" style="display:none"></div>
@@ -589,7 +649,6 @@
 <div id="page-uppc" class="page">
   <div class="page-header">
     <div class="page-title">Uncle Philthy's PKC</div>
-    <button class="btn btn-gold" onclick="toggleGenericForm('uppc')">Log Pour</button>
   </div>
 
   <div id="uppc-form-wrap" style="display:none"></div>
@@ -718,12 +777,18 @@
     <div class="page-title">Alerts</div>
   </div>
   <div class="alerts-threshold-box">
-    <label for="threshold-input">Low Stock Threshold</label>
-    <input type="number" id="threshold-input" min="0" step="1" placeholder="e.g. 50">
-    <button class="btn btn-gold" onclick="saveThreshold()">Save</button>
+    <div style="width:100%;margin-bottom:8px;color:#8aadcf;font-size:10px;letter-spacing:2px;text-transform:uppercase">Low Stock Thresholds by Type</div>
+    <div class="threshold-fields">
+      <div class="threshold-field"><span>Eyeballs</span><input type="number" data-type="Eyeballs" min="0" step="1" placeholder="50"></div>
+      <div class="threshold-field"><span>Hooks</span><input type="number" data-type="Hooks" min="0" step="1" placeholder="50"></div>
+      <div class="threshold-field"><span>Split Rings</span><input type="number" data-type="Split Rings" min="0" step="1" placeholder="50"></div>
+      <div class="threshold-field"><span>Hookeyes</span><input type="number" data-type="Hookeyes" min="0" step="1" placeholder="50"></div>
+    </div>
+    <button class="btn btn-gold" onclick="saveComponentThresholdsUI()" style="margin-top:8px">Save</button>
     <span id="threshold-status" style="font-size:11px;color:#5a7a9a"></span>
   </div>
-  <div id="alerts-table"></div>
+  <div id="alerts-order-cards"></div>
+  <div id="alerts-demand-summary"></div>
 </div>
 
 <script>
@@ -803,9 +868,30 @@ const COMPONENTS = [
   { key: 'splitRings_4',   label: 'Split Rings', size: '#4' },
 ];
 
+const COMPONENT_TYPES = ['Eyeballs', 'Hooks', 'Split Rings', 'Hookeyes'];
+
 function getLowStockThreshold() {
   const v = parseInt(localStorage.getItem('vikingHeads_lowStockThreshold'));
   return isNaN(v) ? 50 : v;
+}
+
+function getComponentThresholds() {
+  try {
+    const raw = localStorage.getItem('vikingHeads_componentThresholds');
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  const fallback = getLowStockThreshold();
+  const t = {};
+  COMPONENT_TYPES.forEach(type => { t[type] = fallback; });
+  return t;
+}
+
+function getThresholdForComponent(def) {
+  return getComponentThresholds()[def.label] || 50;
+}
+
+function saveComponentThresholds(thresholds) {
+  localStorage.setItem('vikingHeads_componentThresholds', JSON.stringify(thresholds));
 }
 
 // ============================================================
@@ -1042,6 +1128,8 @@ function calcDeductionsForSku(def, qty) {
   }
 }
 
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
 function fmtDate(iso) {
   const d = new Date(iso);
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -1143,7 +1231,7 @@ function render(name) {
   else if (name === 'history')      renderHistory();
   else if (name === 'orders')       renderOrders();
   else if (name === 'alerts')       renderAlerts();
-  else if (name === 'data')         updateApiKeyStatus();
+  else if (name === 'data')         { /* no-op */ }
 }
 
 // ============================================================
@@ -1163,7 +1251,7 @@ function renderDashboard() {
 
   // Overdue & due soon
   const overdueOrders = activeOrders.filter(o =>
-    o.status !== 'shipped' && new Date(o.dueDate + 'T00:00:00') < now
+    o.status !== 'shipped' && o.status !== 'poured' && new Date(o.dueDate + 'T00:00:00') < now
   );
   const dueSoonOrders = activeOrders.filter(o => {
     if (o.status === 'shipped') return false;
@@ -1175,8 +1263,8 @@ function renderDashboard() {
   const totalHeads = activeOrders.reduce((s, o) => s + o.items.reduce((ss, i) => ss + i.quantity, 0), 0);
 
   // Component alerts
-  const threshold = getLowStockThreshold();
-  const lowStockCount = COMPONENTS.filter(def => (data.components[def.key] || 0) < threshold).length;
+  const _thresholds = getComponentThresholds();
+  const lowStockCount = COMPONENTS.filter(def => (data.components[def.key] || 0) < (_thresholds[def.label] || 50)).length;
 
   // Recent pours (last 7 days)
   const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
@@ -1517,6 +1605,31 @@ function submitFinesse() {
 }
 
 // ============================================================
+// PIPELINE COUNTS — poured (not yet bagged) and bagged totals
+// ============================================================
+
+const HEADS_PER_BAG = {
+  'Swinghead': 2, 'Finesse Head': 3, 'VK Head': 2,
+  'Weedguard Head': 2, "Uncle Philthy's": 4
+};
+
+function getSkuPipelineCounts(productType, color, size, hookSize) {
+  const data = load();
+  let poured = 0, bagged = 0;
+  data.orders.filter(o => !o.archived).forEach(order => {
+    order.items.forEach(item => {
+      if (item.productType !== productType) return;
+      if (item.color !== color || item.size !== size) return;
+      if (hookSize && item.hookSize !== hookSize) return;
+      const st = item.itemStatus || {};
+      if (st.painted) bagged += item.quantity;
+      else if (st.poured) poured += item.quantity;
+    });
+  });
+  return { poured, bagged };
+}
+
+// ============================================================
 // RENDER: SWINGHEADS
 // ============================================================
 
@@ -1526,11 +1639,11 @@ function renderSwingheads() {
 
   let html = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>Size</th><th>Hook</th><th>In Stock (Heads)</th><th>Adjust Stock</th>
+      <th>Size</th><th>Hook</th><th>Poured</th><th>Bagged</th><th>Adjust Stock</th>
     </tr></thead><tbody>`;
 
   SWINGHEAD_COLORS.forEach((color, ci) => {
-    html += `<tr class="color-group-header"><td colspan="4">${color}</td></tr>`;
+    html += `<tr class="color-group-header"><td colspan="5">${color}</td></tr>`;
     SWINGHEAD_SIZES.forEach((size, si) => {
       const totalQty = pours
         .filter(p => p.color === color && p.size === size)
@@ -1539,10 +1652,13 @@ function renderSwingheads() {
       const hookDisp = SWINGHEAD_MAP[size] ? SWINGHEAD_MAP[size].hookDisplay : '—';
       const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
       const valCls = totalQty < 0 ? ' stock-negative-val' : '';
+      const pipe = getSkuPipelineCounts('Swinghead', color, size, null);
+      const bags = Math.floor(pipe.bagged / HEADS_PER_BAG['Swinghead']);
       html += `<tr${rowCls}>
         <td>${size}</td>
         <td>${hookDisp}</td>
-        <td class="num${valCls}">${totalQty}</td>
+        <td class="num${valCls}" style="color:#c9a227">${pipe.poured}</td>
+        <td class="num${valCls}" style="color:#4caf7d">${bags}</td>
         <td>
           <span class="restock-wrap">
             <input type="number" id="${inputId}" placeholder="\u00b1qty">
@@ -1567,11 +1683,11 @@ function renderFinesse() {
 
   let html = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>Size</th><th>Hook</th><th>In Stock (Heads)</th><th>Adjust Stock</th>
+      <th>Size</th><th>Hook</th><th>Poured</th><th>Bagged</th><th>Adjust Stock</th>
     </tr></thead><tbody>`;
 
   FINESSE_COLORS.forEach((color, ci) => {
-    html += `<tr class="color-group-header"><td colspan="4">${color}</td></tr>`;
+    html += `<tr class="color-group-header"><td colspan="5">${color}</td></tr>`;
     FINESSE_SIZES.forEach((size, si) => {
       const map = FINESSE_MAP[size];
       map.hookOptions.forEach((hookLabel, hi) => {
@@ -1581,10 +1697,13 @@ function renderFinesse() {
         const inputId = `adj-fh-${ci}-${si}-${hi}`;
         const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
         const valCls = totalQty < 0 ? ' stock-negative-val' : '';
+        const pipe = getSkuPipelineCounts('Finesse Head', color, size, hookLabel);
+        const bags = Math.floor(pipe.bagged / HEADS_PER_BAG['Finesse Head']);
         html += `<tr${rowCls}>
           <td>${size}</td>
           <td>${hookLabel}</td>
-          <td class="num${valCls}">${totalQty}</td>
+          <td class="num${valCls}" style="color:#c9a227">${pipe.poured}</td>
+          <td class="num${valCls}" style="color:#4caf7d">${bags}</td>
           <td>
             <span class="restock-wrap">
               <input type="number" id="${inputId}" placeholder="\u00b1qty">
@@ -1625,7 +1744,7 @@ function renderComponents() {
 
   COMPONENTS.forEach(def => {
     const qty  = data.components[def.key] || 0;
-    const low  = qty < getLowStockThreshold();
+    const low  = qty < getThresholdForComponent(def);
     const rate = calcDailyUsageRate(def.key, 30);
     let daysCell = '—';
     if (rate > 0) {
@@ -1652,24 +1771,56 @@ function renderComponents() {
 }
 
 // ============================================================
-// ALERTS — badge, threshold settings, alerts page
+// ALERTS — demand engine, badge, threshold settings, alerts page
 // ============================================================
 
-function updateAlertBadge() {
-  const data      = load();
-  const threshold = getLowStockThreshold();
-  const lowStock  = COMPONENTS.filter(def => (data.components[def.key] || 0) < threshold).length;
+function calcOpenOrderDemand() {
+  const data = load();
+  const activeOrders = data.orders.filter(o => !o.archived && o.status !== 'shipped');
+  const orderDemands = [];
+  const totalDemand = {};
 
-  // Count overdue orders (pending or partial, past due date)
+  activeOrders.forEach(order => {
+    const unpouredItems = order.items.filter(i => !i.itemStatus || !i.itemStatus.poured);
+    if (!unpouredItems.length) return;
+    const compMaps = unpouredItems.map(i => i.components).filter(Boolean);
+    const orderTotal = aggregateComponents(compMaps);
+    if (Object.keys(orderTotal).length === 0) return;
+    orderDemands.push({ order, components: orderTotal });
+    Object.entries(orderTotal).forEach(([k, v]) => { totalDemand[k] = (totalDemand[k] || 0) + v; });
+  });
+
+  return { totalDemand, orderDemands };
+}
+
+function classifyComponentSeverity(def, qty, threshold, demandForKey) {
+  if (qty === 0 || qty < demandForKey) return 'critical';
+  if (qty < threshold) return 'low';
+  if (qty < threshold * 1.2) return 'warning';
+  return null;
+}
+
+function updateAlertBadge() {
+  const data = load();
+  const thresholds = getComponentThresholds();
+  const { totalDemand } = calcOpenOrderDemand();
+
+  let alertCount = 0;
+  COMPONENTS.forEach(def => {
+    const qty = data.components[def.key] || 0;
+    const threshold = thresholds[def.label] || 50;
+    const demand = totalDemand[def.key] || 0;
+    const sev = classifyComponentSeverity(def, qty, threshold, demand);
+    if (sev === 'critical' || sev === 'low') alertCount++;
+  });
+
+  // Count overdue orders
   const now = new Date(); now.setHours(0,0,0,0);
   const overdueCount = data.orders.filter(o =>
     !o.archived && o.status !== 'poured' && o.status !== 'shipped'
-  ).reduce((sum, o) => {
-    const due = new Date(o.dueDate + 'T00:00:00');
-    return sum + (due < now ? 1 : 0);
-  }, 0);
+  ).reduce((sum, o) => sum + (new Date(o.dueDate + 'T00:00:00') < now ? 1 : 0), 0);
 
-  const count = lowStock + overdueCount;
+  const count = alertCount + overdueCount;
   const badge = document.getElementById('alert-badge');
   if (!badge) return;
   if (count > 0) {
@@ -1681,36 +1832,29 @@ function updateAlertBadge() {
   }
 }
 
-function saveThreshold() {
-  const input = document.getElementById('threshold-input');
-  const val   = parseInt(input.value);
-  if (isNaN(val) || val < 0) {
-    document.getElementById('threshold-status').textContent = 'Enter a valid number ≥ 0.';
+function saveComponentThresholdsUI() {
+  const thresholds = {};
+  let valid = true;
+  document.querySelectorAll('#page-alerts [data-type]').forEach(input => {
+    const val = parseInt(input.value);
+    if (isNaN(val) || val < 0) { valid = false; return; }
+    thresholds[input.dataset.type] = val;
+  });
+  if (!valid) {
+    document.getElementById('threshold-status').textContent = 'Enter valid numbers ≥ 0 for all fields.';
     return;
   }
-  localStorage.setItem('vikingHeads_lowStockThreshold', val);
-  document.getElementById('threshold-status').textContent = '✓ Saved — threshold set to ' + val;
+  saveComponentThresholds(thresholds);
+  document.getElementById('threshold-status').textContent = '✓ Thresholds saved';
   updateAlertBadge();
   renderAlerts();
 }
 
-function renderAlerts() {
-  const data      = load();
-  const threshold = getLowStockThreshold();
+// ── Order alert cards (overdue / due soon) ──
+function renderOrderAlertCards(data, now) {
+  const wrap = document.getElementById('alerts-order-cards');
+  if (!wrap) return;
 
-  // Populate the threshold input with current value
-  const inputEl = document.getElementById('threshold-input');
-  if (inputEl && inputEl.value === '') inputEl.value = threshold;
-
-  const lowItems = COMPONENTS
-    .map(def => ({ def, qty: data.components[def.key] || 0 }))
-    .filter(({ qty }) => qty < threshold);
-
-  const tableDiv = document.getElementById('alerts-table');
-  if (!tableDiv) return;
-
-  // Overdue orders section
-  const now = new Date(); now.setHours(0,0,0,0);
   const overdueOrders = data.orders.filter(o => {
     if (o.archived || o.status === 'poured' || o.status === 'shipped') return false;
     return new Date(o.dueDate + 'T00:00:00') < now;
@@ -1721,66 +1865,106 @@ function renderAlerts() {
     return days >= 0 && days <= 3;
   });
 
-  let overdueHtml = '';
-  if (overdueOrders.length || dueSoonOrders.length) {
-    overdueHtml += `<div style="margin-bottom:20px">`;
-    if (overdueOrders.length) {
-      overdueHtml += `<div style="color:#f09090;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">🔴 ${overdueOrders.length} Overdue Order${overdueOrders.length > 1 ? 's' : ''}</div>`;
-      overdueOrders.forEach(o => {
-        const days = Math.abs(Math.round((new Date(o.dueDate + 'T00:00:00') - now) / 86400000));
-        const heads = o.items.reduce((s, i) => s + i.quantity, 0);
-        overdueHtml += `<div style="padding:6px 12px;background:#2a0a0a;border:1px solid #5a2020;border-radius:4px;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <span style="color:#c9a227;font-weight:bold;letter-spacing:1px">${o.shop.toUpperCase()}</span>
-          <span class="badge-overdue">OVERDUE ${days}d</span>
-          <span class="muted" style="font-size:11px">${heads} heads · ${o.status}</span>
-          <span style="flex:1"></span>
-          <button class="btn btn-sm" onclick="showPage('orders')">Go to Orders</button>
-        </div>`;
-      });
-    }
-    if (dueSoonOrders.length) {
-      overdueHtml += `<div style="color:#f5d070;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin:12px 0 8px">⚠ ${dueSoonOrders.length} Due Soon</div>`;
-      dueSoonOrders.forEach(o => {
-        const days = Math.round((new Date(o.dueDate + 'T00:00:00') - now) / 86400000);
-        const heads = o.items.reduce((s, i) => s + i.quantity, 0);
-        overdueHtml += `<div style="padding:6px 12px;background:#1a1400;border:1px solid #4a3a00;border-radius:4px;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <span style="color:#c9a227;font-weight:bold;letter-spacing:1px">${o.shop.toUpperCase()}</span>
-          <span class="badge-due-soon">DUE IN ${days}d</span>
-          <span class="muted" style="font-size:11px">${heads} heads · ${o.status}</span>
-          <span style="flex:1"></span>
-          <button class="btn btn-sm" onclick="showPage('orders')">Go to Orders</button>
-        </div>`;
-      });
-    }
-    overdueHtml += `</div>`;
-  }
+  if (!overdueOrders.length && !dueSoonOrders.length) { wrap.innerHTML = ''; return; }
 
-  if (lowItems.length === 0 && !overdueOrders.length && !dueSoonOrders.length) {
-    tableDiv.innerHTML = '<div class="alerts-empty">✓ NO ALERTS — ALL COMPONENTS ABOVE THRESHOLD, NO OVERDUE ORDERS</div>';
-    return;
-  }
+  let html = '<div class="alerts-section-title">Order Alerts</div>';
 
-  let html = overdueHtml;
+  const renderCard = (o, isOverdue) => {
+    const dueDate = new Date(o.dueDate + 'T00:00:00');
+    const daysDiff = Math.abs(Math.round((dueDate - now) / 86400000));
+    const heads = o.items.reduce((s, i) => s + i.quantity, 0);
+    const unpoured = o.items.filter(i => !i.itemStatus || !i.itemStatus.poured);
+    const fulfill = canFulfillOrder(o);
 
-  if (lowItems.length) {
-    html += `<div class="table-wrap"><table>
+    let itemsPreview = unpoured.slice(0, 3).map(i => `${i.quantity}× ${i.sku || i.color}`).join(', ');
+    if (unpoured.length > 3) itemsPreview += ` +${unpoured.length - 3} more`;
+
+    const dueBadge = isOverdue
+      ? `<span class="badge-overdue">OVERDUE ${daysDiff}d</span>`
+      : `<span class="badge-due-soon">DUE IN ${daysDiff}d</span>`;
+    const fulfillBadge = fulfill.ok
+      ? `<span class="badge-can-fulfill">CAN FULFILL</span>`
+      : `<span class="badge-shortfall">SHORTFALL</span>`;
+
+    html += `<div class="order-alert-card ${isOverdue ? 'overdue' : 'due-soon'}">
+      <div class="order-alert-top">
+        <span class="order-alert-shop">${o.shop.toUpperCase()}</span>
+        ${dueBadge} ${fulfillBadge}
+        <span class="muted" style="font-size:11px">${heads} heads · ${unpoured.length} unpoured · ${o.status}</span>
+        <span style="flex:1"></span>
+        <button class="btn btn-sm" onclick="showPage('orders')">Go to Orders</button>
+      </div>
+      <div class="order-alert-detail">
+        ${itemsPreview}
+        ${!fulfill.ok ? `<br><span style="color:#e05050">${fulfill.shortfalls.join(' · ')}</span>` : ''}
+      </div>
+    </div>`;
+  };
+
+  overdueOrders.forEach(o => renderCard(o, true));
+  dueSoonOrders.forEach(o => renderCard(o, false));
+  wrap.innerHTML = html;
+}
+
+// ── Demand vs stock summary ──
+function renderDemandSummary(data, totalDemand, orderDemands) {
+  const wrap = document.getElementById('alerts-demand-summary');
+  if (!wrap) return;
+
+  // Only show if there's any demand or zero-stock components
+  const demandEntries = COMPONENTS
+    .map(def => {
+      const qty = data.components[def.key] || 0;
+      const demand = totalDemand[def.key] || 0;
+      if (demand === 0 && qty > 0) return null;
+      return { def, qty, demand, diff: qty - demand };
+    })
+    .filter(Boolean);
+
+  if (!demandEntries.length) { wrap.innerHTML = ''; return; }
+
+  let html = '<div class="alerts-section-title">Component Demand vs Stock</div>';
+
+  COMPONENT_TYPES.forEach(type => {
+    const group = demandEntries.filter(e => e.def.label === type);
+    if (!group.length) return;
+    html += `<div class="table-wrap" style="margin-bottom:14px"><table>
       <thead><tr>
-        <th>Component</th><th>Size</th><th>Qty On Hand</th><th>Threshold</th><th>Shortfall</th>
+        <th colspan="99" style="color:#c9a227;letter-spacing:2px">${type}</th>
+      </tr><tr>
+        <th>Size</th><th>Stock</th><th>Demand</th><th>Balance</th>
       </tr></thead><tbody>`;
-    lowItems.forEach(({ def, qty }) => {
-      const shortfall = threshold - qty;
+    group.forEach(({ def, qty, demand, diff }) => {
+      const color = diff >= 0 ? '#5ad090' : '#f09090';
+      const prefix = diff > 0 ? '+' : '';
       html += `<tr>
-        <td>${def.label}</td>
         <td>${def.size}</td>
-        <td class="num low-stock">${qty} ⚠</td>
-        <td class="num">${threshold}</td>
-        <td class="num" style="color:#e05050">${shortfall}</td>
+        <td class="num">${qty}</td>
+        <td class="num">${demand}</td>
+        <td class="num" style="color:${color};font-weight:bold">${prefix}${diff}</td>
       </tr>`;
     });
     html += '</tbody></table></div>';
-  }
+  });
 
-  tableDiv.innerHTML = html;
+  wrap.innerHTML = html;
+}
+
+// ── Grouped component alerts by type ──
+// ── Main alerts orchestrator ──
+function renderAlerts() {
+  const data = load();
+  const thresholds = getComponentThresholds();
+  const { totalDemand, orderDemands } = calcOpenOrderDemand();
+  const now = new Date(); now.setHours(0,0,0,0);
+
+  // Populate threshold inputs
+  document.querySelectorAll('#page-alerts [data-type]').forEach(input => {
+    if (input.value === '') input.value = thresholds[input.dataset.type] || 50;
+  });
+
+  renderOrderAlertCards(data, now);
+  renderDemandSummary(data, totalDemand, orderDemands);
 }
 
 function addStock(key) {
@@ -1925,7 +2109,7 @@ function exportPoursCsv() {
   pours.forEach(p => {
     const type = p.isShipment ? 'Shipment' : p.isAdjustment ? 'Adjustment' : 'Pour';
     const comps = deductionLine(p.deductions).replace(/,/g, ';');
-    rows.push([fmtDate(p.date), p.productType, p.size, p.color, p.hookSize || '', p.quantity, type, `"${comps}"`].join(','));
+    rows.push([fmtDate(p.date), p.productType, p.size, p.color, p.hookSize || '', p.quantity, type, comps].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
   });
   const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
   const a = document.createElement('a');
@@ -1958,7 +2142,7 @@ function importData(e) {
   const reader = new FileReader();
   reader.onload = ev => {
     try {
-      const d = JSON.parse(ev.target.result);
+      const d = applyMigrations(JSON.parse(ev.target.result));
       if (!d.components || !Array.isArray(d.pours)) throw new Error();
       if (!Array.isArray(d.orders)) d.orders = [];
       save(d);
@@ -2042,6 +2226,8 @@ function toggleGenericForm(id) {
   if (genericFormOpen[id]) {
     wrap.innerHTML = buildGenericForm(id);
     wrap.style.display = 'block';
+    updateGenericHookDisplay(id);
+    updateGenericDeductionPreview(id);
   } else {
     wrap.style.display = 'none';
     wrap.innerHTML = '';
@@ -2170,7 +2356,7 @@ function renderGenericPage(id) {
   const isUppc = cfg.colors.length === 1 && cfg.colors[0] === 'Mixed';
   let html = '';
 
-  const stockLabel = isUppc ? 'In Stock (Packs)' : 'In Stock (Heads)';
+  const stockLabel = isUppc ? 'In Stock (Packs)' : isRig ? 'In Stock (Rigs)' : 'In Stock (Heads)';
 
   if (isRig) {
     html = `<div class="table-wrap"><table><thead><tr><th>Color</th><th>${stockLabel}</th><th>Adjust Stock</th></tr></thead><tbody>`;
@@ -2190,15 +2376,18 @@ function renderGenericPage(id) {
     html += '</tbody></table></div>';
 
   } else if (isUppc) {
-    html = `<div class="table-wrap"><table><thead><tr><th>Size</th><th>${stockLabel}</th><th>Adjust Stock</th></tr></thead><tbody>`;
+    html = `<div class="table-wrap"><table><thead><tr><th>Size</th><th>Poured</th><th>Bagged</th><th>Adjust Stock</th></tr></thead><tbody>`;
     cfg.sizes.forEach((size, si) => {
       const totalQty = pours.filter(p => p.size === size).reduce((s, p) => s + p.quantity, 0);
       const inputId  = `adj-${id}-${si}`;
       const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
       const valCls = totalQty < 0 ? ' stock-negative-val' : '';
+      const pipe = getSkuPipelineCounts(cfg.productType, 'Mixed', size, null);
+      const bags = Math.floor(pipe.bagged / (HEADS_PER_BAG[cfg.productType] || 1));
       html += `<tr${rowCls}>
         <td>${size}</td>
-        <td class="num${valCls}">${totalQty}</td>
+        <td class="num${valCls}" style="color:#c9a227">${pipe.poured}</td>
+        <td class="num${valCls}" style="color:#4caf7d">${bags}</td>
         <td><span class="restock-wrap">
           <input type="number" id="${inputId}" placeholder="\u00b1qty">
           <button class="btn btn-sm" onclick="adjustGenericQty('${id}','Mixed','${size}','${inputId}')">Add</button>
@@ -2207,8 +2396,8 @@ function renderGenericPage(id) {
     html += '</tbody></table></div>';
 
   } else {
-    const colCount = cfg.hasHook ? 4 : 3;
-    html = `<div class="table-wrap"><table><thead><tr><th>Size</th>${cfg.hasHook ? '<th>Hook</th>' : ''}<th>${stockLabel}</th><th>Adjust Stock</th></tr></thead><tbody>`;
+    const colCount = cfg.hasHook ? 5 : 4;
+    html = `<div class="table-wrap"><table><thead><tr><th>Size</th>${cfg.hasHook ? '<th>Hook</th>' : ''}<th>Poured</th><th>Bagged</th><th>Adjust Stock</th></tr></thead><tbody>`;
     cfg.colors.forEach((color, ci) => {
       html += `<tr class="color-group-header"><td colspan="${colCount}">${color}</td></tr>`;
       cfg.sizes.forEach((size, si) => {
@@ -2217,10 +2406,13 @@ function renderGenericPage(id) {
         const hookDisp = cfg.hasHook && cfg.hookMap[size] ? cfg.hookMap[size].hookDisplay : null;
         const rowCls = totalQty < 0 ? ' class="stock-negative"' : totalQty === 0 ? ' class="stock-zero"' : '';
         const valCls = totalQty < 0 ? ' stock-negative-val' : '';
+        const pipe = getSkuPipelineCounts(cfg.productType, color, size, null);
+        const bags = Math.floor(pipe.bagged / (HEADS_PER_BAG[cfg.productType] || 1));
         html += `<tr${rowCls}>
           <td>${size}</td>
           ${cfg.hasHook ? `<td>${hookDisp || '\u2014'}</td>` : ''}
-          <td class="num${valCls}">${totalQty}</td>
+          <td class="num${valCls}" style="color:#c9a227">${pipe.poured}</td>
+          <td class="num${valCls}" style="color:#4caf7d">${bags}</td>
           <td><span class="restock-wrap">
             <input type="number" id="${inputId}" placeholder="\u00b1qty">
             <button class="btn btn-sm" onclick="adjustGenericQty('${id}','${color}','${size}','${inputId}')">Add</button>
@@ -2258,33 +2450,6 @@ function adjustGenericQty(pageId, color, size, inputId) {
 // API KEY MANAGEMENT
 // ============================================================
 
-function getApiKey() {
-  return localStorage.getItem('vikingHeadsApiKey') || null;
-}
-
-function saveApiKey() {
-  const key = document.getElementById('api-key-input').value.trim();
-  if (!key) { alert('Enter an API key first.'); return; }
-  localStorage.setItem('vikingHeadsApiKey', key);
-  document.getElementById('api-key-input').value = '';
-  updateApiKeyStatus();
-}
-
-function clearApiKey() {
-  if (!confirm('Remove the saved API key?')) return;
-  localStorage.removeItem('vikingHeadsApiKey');
-  updateApiKeyStatus();
-}
-
-function updateApiKeyStatus() {
-  const el = document.getElementById('api-key-status');
-  if (!el) return;
-  const key = getApiKey();
-  el.textContent = key
-    ? `Key saved: ${key.slice(0, 10)}${'•'.repeat(10)}`
-    : 'No key saved.';
-  el.style.color = key ? '#4caf7d' : '#5a7a9a';
-}
 
 // ============================================================
 // FIREBASE CONFIG
@@ -3128,7 +3293,7 @@ function renderVendorInbox() {
 
     // Items preview (first 3 items)
     const previewItems = (order.items || []).slice(0, 3).map(i =>
-      `${i.qty}x ${i.color} ${i.size}${i.hook ? ' ' + i.hook : ''}`
+      `${i.qty}x ${esc(i.color)} ${esc(i.size)}${i.hook ? ' ' + esc(i.hook) : ''}`
     ).join(' &middot; ');
     const moreCount = (order.items || []).length - 3;
     const moreStr = moreCount > 0 ? ` <span style="color:#3a5a7a">+${moreCount} more</span>` : '';
@@ -3146,17 +3311,17 @@ function renderVendorInbox() {
       const skuLabel = match ? match.sku : `<span style="color:#e87070">NO MATCH</span>`;
       detailRows += `<tr>
         <td class="muted" style="font-size:11px">${skuLabel}</td>
-        <td>${i.cat || ''}</td>
-        <td>${i.color || ''}</td>
-        <td>${i.size || ''}</td>
-        <td>${i.hook || '—'}</td>
+        <td>${esc(i.cat || '')}</td>
+        <td>${esc(i.color || '')}</td>
+        <td>${esc(i.size || '')}</td>
+        <td>${esc(i.hook || '—')}</td>
         <td class="num">${i.qty || 0}</td>
         <td class="muted">$${(i.total || 0).toFixed(2)}</td>
       </tr>`;
     });
 
     html += `<div class="vendor-card ${statusClass}">
-      <span class="vc-shop">${(order.shop || 'Unknown').toUpperCase()}</span>
+      <span class="vc-shop">${esc((order.shop || 'Unknown').toUpperCase())}</span>
       <span class="vc-meta">#${order.orderNumber || key.slice(-6)}</span>
       <span class="vc-meta">${date}</span>
       <span class="vc-status ${statusLabelClass}">${status.toUpperCase()}</span>
@@ -3167,7 +3332,7 @@ function renderVendorInbox() {
       ${acceptBtn}
       <div class="vc-items-preview">${previewItems}${moreStr}</div>
       <div id="vendor-detail-${key}" style="display:none;width:100%;margin-top:8px">
-        ${order.notes ? `<div style="margin-bottom:8px;padding:6px 10px;background:#091a28;border-left:3px solid #c9a227;font-size:11px;color:#c9d8e8">${order.notes}</div>` : ''}
+        ${order.notes ? `<div style="margin-bottom:8px;padding:6px 10px;background:#091a28;border-left:3px solid #c9a227;font-size:11px;color:#c9d8e8">${esc(order.notes)}</div>` : ''}
         <div class="table-wrap"><table>
           <thead><tr><th>SKU Match</th><th>Category</th><th>Color</th><th>Size</th><th>Hook</th><th>Qty</th><th>Price</th></tr></thead>
           <tbody>${detailRows}</tbody>
@@ -3227,7 +3392,7 @@ function acceptVendorOrder(key) {
   const newOrder = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2),
     shop: order.shop || 'Vendor Order',
-    dueDate: '',
+    dueDate: (() => { const d = new Date(); d.setDate(d.getDate() + 14); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })(),
     notes: `Vendor portal order #${order.orderNumber || key.slice(-6)}${order.notes ? ' — ' + order.notes : ''}`,
     createdAt: new Date().toISOString(),
     status: 'pending',
@@ -3432,15 +3597,15 @@ function renderOrderDetailsContent(order) {
     <span class="muted" style="font-size:10px;letter-spacing:1px;text-transform:uppercase">Bulk:</span>
     <button class="btn btn-sm" onclick="bulkSetItemStatus('${order.id}','poured',true)">✓ All Poured</button>
     <button class="btn btn-sm" onclick="bulkSetItemStatus('${order.id}','loaded',true)">✓ All Loaded</button>
-    <button class="btn btn-sm" onclick="bulkSetItemStatus('${order.id}','painted',true)">✓ All Painted</button>
+    <button class="btn btn-sm" onclick="bulkSetItemStatus('${order.id}','painted',true)">✓ All Bagged</button>
     <button class="btn btn-sm btn-danger" style="margin-left:8px" onclick="bulkSetItemStatus('${order.id}','poured',false)">✕ Poured</button>
     <button class="btn btn-sm btn-danger" onclick="bulkSetItemStatus('${order.id}','loaded',false)">✕ Loaded</button>
-    <button class="btn btn-sm btn-danger" onclick="bulkSetItemStatus('${order.id}','painted',false)">✕ Painted</button>
+    <button class="btn btn-sm btn-danger" onclick="bulkSetItemStatus('${order.id}','painted',false)">✕ Bagged</button>
   </div>`;
 
   // Notes display
   const notesRow = order.notes
-    ? `<div style="margin-bottom:10px;padding:7px 12px;background:#091a28;border-left:3px solid #c9a227;font-size:12px;color:#c9d8e8">📝 ${order.notes}</div>`
+    ? `<div style="margin-bottom:10px;padding:7px 12px;background:#091a28;border-left:3px solid #c9a227;font-size:12px;color:#c9d8e8">📝 ${esc(order.notes)}</div>`
     : '';
 
   let itemRows = '';
@@ -3459,10 +3624,9 @@ function renderOrderDetailsContent(order) {
       <div style="width:1px;background:#1a3050;flex-shrink:0"></div>
       ${seg('loaded',  'LOADED', '#c9a227')}
       <div style="width:1px;background:#1a3050;flex-shrink:0"></div>
-      ${seg('painted', 'PAINTED', '#4caf7d')}
+      ${seg('painted', 'BAGGED', '#4caf7d')}
     </div>`;
-    const logPourBtn = `<button class="btn btn-sm${st.poured?' btn-gold':''}" style="font-size:9px;padding:3px 7px"
-      onclick="logPourForItem('${order.id}',${idx})" title="Log a pour and mark as poured">📝 Pour</button>`;
+    const logPourBtn = '';
     itemRows += `<tr>
       <td class="muted">${item.sku}</td>
       <td>${item.productType}</td>
@@ -3472,14 +3636,13 @@ function renderOrderDetailsContent(order) {
       <td class="num">${item.quantity}</td>
       <td class="muted" style="font-size:11px">${compSummary}</td>
       <td style="padding:4px 8px">${statusBar}</td>
-      <td style="padding:4px 6px">${logPourBtn}</td>
     </tr>`;
   });
 
   return notesRow + bulkBar + `<div class="table-wrap"><table>
     <thead><tr>
       <th>SKU</th><th>Product</th><th>Size</th><th>Color</th><th>Hook</th>
-      <th>Qty</th><th class="col-components">Components</th><th>Status</th><th></th>
+      <th>Qty</th><th class="col-components">Components</th><th>Status</th>
     </tr></thead>
     <tbody>
       ${itemRows}
@@ -3487,7 +3650,7 @@ function renderOrderDetailsContent(order) {
         <td colspan="5" style="color:#8aadcf;font-size:10px;letter-spacing:1px;text-transform:uppercase">Total Components</td>
         <td class="num">${totalQty}</td>
         <td class="muted col-components" style="font-size:11px">${summaryLine}</td>
-        <td colspan="2"></td>
+        <td></td>
       </tr>
     </tbody>
   </table></div>`;
@@ -3531,7 +3694,7 @@ function orderDueDays(order) {
 
 function canFulfillOrder(order) {
   const data = load();
-  const needed = aggregateComponents(order.items.map(i => i.components));
+  const needed = aggregateComponents(order.items.filter(i => !i.itemStatus?.poured).map(i => i.components));
   const shortfalls = [];
   Object.entries(needed).forEach(([k, v]) => {
     const have = data.components[k] || 0;
@@ -3579,7 +3742,7 @@ function renderOrderCard(order) {
 
   // Notes snippet
   const notesSnip = order.notes
-    ? `<span class="muted" style="font-size:11px;font-style:italic;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${order.notes.replace(/"/g,'&quot;')}">📝 ${order.notes}</span>`
+    ? `<span class="muted" style="font-size:11px;font-style:italic;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(order.notes).replace(/"/g,'&quot;')}">📝 ${esc(order.notes)}</span>`
     : '';
 
   return `<div id="order-card-${order.id}" style="margin-bottom:12px">
@@ -3593,7 +3756,6 @@ function renderOrderCard(order) {
       <span style="flex:1"></span>
       <button id="order-toggle-${order.id}" class="btn btn-sm" onclick="event.stopPropagation();toggleOrderDetails('${order.id}')">▼ Details</button>
       <button class="btn btn-sm" onclick="event.stopPropagation();printOrder('${order.id}')">🖨 Print</button>
-      ${pourBtn}
       ${shipBtn}
       <button class="btn btn-sm" onclick="event.stopPropagation();duplicateOrder('${order.id}')" title="Clone this order">⧉ Dup</button>
       <button class="btn btn-sm" onclick="event.stopPropagation();archiveOrder('${order.id}')" title="Move to archive">📦</button>
@@ -3963,8 +4125,18 @@ function toggleItemStatus(orderId, itemIdx, field) {
   if (!order.items[itemIdx].itemStatus) order.items[itemIdx].itemStatus = { poured: false, loaded: false, painted: false };
   const newVal = !order.items[itemIdx].itemStatus[field];
   order.items[itemIdx].itemStatus[field] = newVal;
+  // Auto-promote order status if all items are now poured
+  const allPoured = order.items.every(it => it.itemStatus?.poured);
+  if (allPoured && order.status !== 'poured' && order.status !== 'shipped') {
+    order.status = 'poured';
+  }
   save(data);
-  // Update just the clicked segment's color
+  // Re-render the order card + details if status was promoted
+  if (allPoured && order.status === 'poured') {
+    render(activePage);
+    return;
+  }
+  // Otherwise just update the clicked segment's color
   const seg = document.getElementById(`status-${orderId}-${itemIdx}-${field}`);
   if (seg) {
     const activeColor = field === 'painted' ? '#4caf7d' : '#c9a227';
@@ -3995,7 +4167,7 @@ function printOrder(orderId) {
       <div style="width:1px;background:#bbb"></div>
       <div style="flex:1;text-align:center;padding:3px 4px;background:${st.loaded?'#c9a227':'#fff'};color:${st.loaded?'#000':'#aaa'}">LOADED</div>
       <div style="width:1px;background:#bbb"></div>
-      <div style="flex:1;text-align:center;padding:3px 4px;background:${st.painted?'#4caf7d':'#fff'};color:${st.painted?'#000':'#aaa'}">PAINTED</div>
+      <div style="flex:1;text-align:center;padding:3px 4px;background:${st.painted?'#4caf7d':'#fff'};color:${st.painted?'#000':'#aaa'}">BAGGED</div>
     </div>`;
     rows += `<tr>
       <td>${item.sku}</td><td>${item.productType}</td><td>${item.size}</td>
@@ -4187,7 +4359,7 @@ function printBundle(bundleId) {
   const bundle = data.bundles.find(b => b.id === bundleId);
   if (!bundle) return;
   const orders = data.orders.filter(o => bundle.orderIds.includes(o.id));
-  _printCombinedData(bundle.skuAgg, orders);
+  _printCombinedData(_buildSkuAgg(orders), orders);
 }
 
 function deleteBundle(bundleId) {
@@ -4237,7 +4409,13 @@ function bulkSetItemStatus(orderId, field, value) {
     if (!item.itemStatus) item.itemStatus = { poured: false, loaded: false, painted: false };
     item.itemStatus[field] = value;
   });
+  // Auto-promote order status if all items are now poured
+  const allPoured = order.items.every(it => it.itemStatus?.poured);
+  if (allPoured && order.status !== 'poured' && order.status !== 'shipped') {
+    order.status = 'poured';
+  }
   save(data);
+  if (allPoured && order.status === 'poured') { render(activePage); return; }
   const det = document.getElementById('order-details-' + orderId);
   if (det && det.style.display !== 'none') det.innerHTML = renderOrderDetailsContent(order);
   showToast(value ? `All items marked ${field}` : `${field} cleared`);
@@ -4276,8 +4454,14 @@ function logPourForItem(orderId, itemIdx) {
   item.itemStatus = item.itemStatus || {};
   item.itemStatus.poured = true;
 
+  // Auto-promote order status if all items are now poured
+  const allPouredCheck = order.items.every(it => it.itemStatus?.poured);
+  if (allPouredCheck && order.status !== 'poured' && order.status !== 'shipped') {
+    order.status = 'poured';
+  }
   save(data);
   showToast(`Pour logged for ${item.sku}`);
+  if (allPouredCheck && order.status === 'poured') { render(activePage); return; }
   const det = document.getElementById('order-details-' + orderId);
   if (det && det.style.display !== 'none') det.innerHTML = renderOrderDetailsContent(order);
 }
@@ -4288,13 +4472,13 @@ function logPourForItem(orderId, itemIdx) {
 
 function showReorderList() {
   const data    = load();
-  const pending = data.orders.filter(o => !o.archived && o.status !== 'poured');
+  const pending = data.orders.filter(o => !o.archived && o.status !== 'poured' && o.status !== 'shipped');
   if (!pending.length) { showToast('No pending orders to plan for', 'info'); return; }
 
   // Aggregate all components needed across pending orders
   const needed = {};
   pending.forEach(order => {
-    order.items.forEach(item => {
+    order.items.filter(i => !i.itemStatus?.poured).forEach(item => {
       Object.entries(item.components).forEach(([k, v]) => { needed[k] = (needed[k] || 0) + v; });
     });
   });
@@ -4417,9 +4601,9 @@ function renderUsageReport(days) {
     Object.entries(p.deductions).forEach(([k, v]) => { usage[k] = (usage[k] || 0) + v; });
   });
 
-  // Aggregate by product type
+  // Aggregate by product type (exclude shipments and adjustments)
   const byType = {};
-  pours.forEach(p => { byType[p.productType] = (byType[p.productType] || 0) + p.quantity; });
+  pours.filter(p => !p.isShipment && !p.isAdjustment).forEach(p => { byType[p.productType] = (byType[p.productType] || 0) + p.quantity; });
 
   let compRows = '';
   COMPONENTS.forEach(def => {
@@ -4631,12 +4815,15 @@ async function initApp() {
     }
 
     // Re-sync when the tab regains focus (picks up changes from other devices)
+    if (!window._visChangeRegistered) {
+    window._visChangeRegistered = true;
     document.addEventListener('visibilitychange', async () => {
       if (document.visibilityState === 'visible' && _db && _pendingSaves === 0) {
         try {
           const snap = await _db.ref('vikingHeads').get();
           if (snap.exists()) {
             _dataCache = applyMigrations(snap.val());
+            localStorage.setItem('vikingHeads', JSON.stringify(_dataCache));
             render(activePage);
           }
           // Refresh vendor orders too
@@ -4646,6 +4833,7 @@ async function initApp() {
         } catch(e) { /* ignore sync errors */ }
       }
     });
+    }
 
     updateFirebaseStatus(true);
 
@@ -4930,6 +5118,7 @@ async function _showGmailModal() {
       fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${q1}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
       fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${q2}`, { headers: { Authorization: `Bearer ${_gmailToken}` } }),
     ]);
+    if ((!res1.ok && res1.status === 401) || (!res2.ok && res2.status === 401)) { _gmailToken = null; showToast('Gmail session expired — click Pull again', 'error'); return; }
     const [d1, d2] = await Promise.all([res1.json(), res2.json()]);
 
     // Merge and deduplicate by message ID
@@ -5064,13 +5253,15 @@ async function _showGmailModal() {
         // Escape single quotes in all string values injected into the onclick attribute
         const safeShop = row.shop.replace(/'/g, "\\'");
         const safeName = att.name.replace(/'/g, "\\'");
+        const safeAttId = (att.id||'').replace(/'/g, "\\'");
+        const safeMsgId = (row.msgId||'').replace(/'/g, "\\'");
         html += `<tr style="${row.isSuspect ? 'opacity:0.6' : ''}">
           <td style="color:#c9a227;font-weight:bold">${row.shop}</td>
           <td style="font-size:12px">${row.subject}${warnBadge}</td>
           <td class="muted" style="font-size:12px">${dateStr}</td>
           <td style="font-size:12px">${att.name}</td>
           <td><button class="btn btn-gold btn-sm"
-            onclick="importGmailAttachment(this,'${row.msgId}','${att.id}','${safeName}','${att.mimeType}','${safeShop}')">
+            onclick="importGmailAttachment(this,'${safeMsgId}','${safeAttId}','${safeName}','${att.mimeType}','${safeShop}')">
             Import
           </button></td>
         </tr>`;
@@ -5093,6 +5284,7 @@ async function importGmailAttachment(btn, msgId, attachmentId, filename, mimeTyp
     const res  = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}/attachments/${attachmentId}`, {
       headers: { Authorization: `Bearer ${_gmailToken}` },
     });
+    if (!res.ok && res.status === 401) { _gmailToken = null; showToast('Gmail session expired — click Pull again', 'error'); return; }
     const data = await res.json();
 
     // Gmail returns base64url — convert to a File object so existing parsers work unchanged
