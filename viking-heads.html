@@ -4212,7 +4212,7 @@ function renderCombinedView(skuAgg, orders, existingBundleId) {
   const grandHeads  = allEntries.reduce((s, e) => s + e.totalQty * (HEADS_PER_BAG[e.productType] || 1), 0);
 
   // Head count breakdowns
-  const byType = {}, bySize = {}, byShop = {}, byColor = {};
+  const byType = {}, bySize = {}, byShop = {}, byColor = {}, byColorType = {};
   const bySizeHeads = {}, byShopHeads = {}, byColorHeads = {};
   allEntries.forEach(e => {
     const hpb = HEADS_PER_BAG[e.productType] || 1;
@@ -4221,6 +4221,8 @@ function renderCombinedView(skuAgg, orders, existingBundleId) {
     bySizeHeads[e.size]   = (bySizeHeads[e.size]   || 0) + e.totalQty * hpb;
     byColor[e.color]      = (byColor[e.color]      || 0) + e.totalQty;
     byColorHeads[e.color] = (byColorHeads[e.color] || 0) + e.totalQty * hpb;
+    const ctKey = e.color + '||' + e.productType;
+    byColorType[ctKey] = (byColorType[ctKey] || 0) + e.totalQty;
     e.shops.forEach(s => {
       byShop[s.shop]      = (byShop[s.shop]      || 0) + s.qty;
       byShopHeads[s.shop] = (byShopHeads[s.shop] || 0) + s.qty * hpb;
@@ -4230,7 +4232,13 @@ function renderCombinedView(skuAgg, orders, existingBundleId) {
   const typeRows     = Object.entries(byType).map(([t, q]) => `<tr><td>${t}</td><td class="num" style="padding-left:16px">${q}</td><td class="muted" style="padding-left:8px;font-size:11px">(${q * (HEADS_PER_BAG[t] || 1)} heads)</td></tr>`).join('');
   const sizeRows     = Object.entries(bySize).map(([s, q]) => `<tr><td>${s}</td><td class="num" style="padding-left:16px">${q}</td><td class="muted" style="padding-left:8px;font-size:11px">(${bySizeHeads[s]} heads)</td></tr>`).join('');
   const shopRows     = Object.entries(byShop).map(([s, q]) => `<tr><td>${s}</td><td class="num" style="padding-left:16px">${q}</td><td class="muted" style="padding-left:8px;font-size:11px">(${byShopHeads[s]} heads)</td></tr>`).join('');
-  const colorRows    = Object.entries(byColor).map(([c, q]) => `<tr><td>${c}</td><td class="num" style="padding-left:16px">${q}</td><td class="muted" style="padding-left:8px;font-size:11px">(${byColorHeads[c]} heads)</td></tr>`).join('');
+  const colorRows    = Object.entries(byColor).map(([c, q]) => {
+    const subtypes = Object.entries(byColorType)
+      .filter(([k]) => k.startsWith(c + '||'))
+      .map(([k, sq]) => { const pt = k.split('||')[1]; return `<tr><td style="padding-left:12px;font-size:11px;color:#5a7a9a">${pt}</td><td class="num" style="padding-left:16px;font-size:11px;color:#5a7a9a">${sq}</td><td class="muted" style="padding-left:8px;font-size:10px">(${sq * (HEADS_PER_BAG[pt] || 1)})</td></tr>`; })
+      .join('');
+    return `<tr><td style="font-weight:bold">${c}</td><td class="num" style="padding-left:16px">${q}</td><td class="muted" style="padding-left:8px;font-size:11px">(${byColorHeads[c]} heads)</td></tr>${subtypes}`;
+  }).join('');
   const grandSummary = Object.entries(grandTotals).map(([k, v]) => `${v} × ${compLabel(k)}`).join('   |   ');
 
   let rows = '';
