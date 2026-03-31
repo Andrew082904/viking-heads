@@ -1347,6 +1347,41 @@ function applyMigrations(d) {
     });
     d._seededBestFishing0323 = true;
   }
+  // Migration: seed Tackle Warehouse PO#194394 (03/30/26)
+  if (!d._seededTW194394) {
+    const tw2Items = [
+      { sku:'VFH1820GBF',   qty:12 }, { sku:'VFH31620CMDO', qty:6  },
+      { sku:'VFH31620SH',   qty:12 }, { sku:'VFH31630SH',   qty:6  },
+      { sku:'VKS12BF',      qty:12 }, { sku:'VKS122MT',     qty:6  },
+      { sku:'VKS14BB',      qty:6  }, { sku:'VKS14BF',      qty:6  },
+      { sku:'VKS14CMDO',    qty:6  }, { sku:'VKS1CMDO',     qty:6  },
+      { sku:'VKS1GD',       qty:6  }, { sku:'VKS34BB',      qty:6  },
+      { sku:'VKS34BF',      qty:6  }, { sku:'VKS34CMDO',    qty:6  },
+      { sku:'VKS34GD',      qty:6  }, { sku:'VKS34MT',      qty:12 },
+      { sku:'VKS34RED',     qty:6  }, { sku:'VKS38RED',     qty:12 },
+    ].map(({ sku, qty }) => {
+      const def = SKU_TABLE[sku];
+      if (!def) return null;
+      const heads = qty * (HEADS_PER_BAG[def.productType] || 1);
+      return {
+        sku, productType: def.productType, size: def.size, color: def.color,
+        hookSize: def.hookSize, hookKey: def.hookKey, quantity: qty,
+        components: calcDeductionsForSku(def, heads),
+        itemStatus: { poured: false, loaded: false, painted: false },
+      };
+    }).filter(Boolean);
+    d.orders.unshift({
+      id: 'tw_po194394',
+      shop: 'Tackle Warehouse',
+      dueDate: '2026-04-14',
+      notes: 'PO#194394 — FFA $1000 Net 30',
+      createdAt: '2026-03-30T00:00:00.000Z',
+      status: 'pending',
+      archived: false,
+      items: tw2Items,
+    });
+    d._seededTW194394 = true;
+  }
   // Migration: recalculate order item components using bags→heads conversion
   if (!d._migratedBagComponents) {
     d.orders.forEach(order => {
