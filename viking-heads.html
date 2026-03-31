@@ -1547,7 +1547,7 @@ function renderDashboard() {
       html += `<div style="padding:6px 0;border-bottom:1px solid #1a3050;display:flex;align-items:center;gap:8px">
         <span style="color:#c9a227;font-weight:600;font-size:12px;letter-spacing:.5px;min-width:100px">${esc(o.shop)}</span>
         <span style="color:${statusColor};font-size:9px;letter-spacing:1px;text-transform:uppercase">${o.status}</span>
-        <span class="muted" style="font-size:11px">${heads} heads</span>
+        <span class="muted" style="font-size:11px">${heads} bags</span>
         <span style="flex:1"></span>
         ${dueBadge}
       </div>`;
@@ -1623,7 +1623,7 @@ function showShopDetail(shop) {
 
   // Order history
   html += `<div style="color:#8aadcf;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin:16px 0 6px">Order History</div>
-    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Status</th><th>Items</th><th>Heads</th><th>Due</th></tr></thead><tbody>`;
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Status</th><th>Items</th><th>Bags</th><th>Due</th></tr></thead><tbody>`;
   orders.forEach(o => {
     const heads = o.items.reduce((s, i) => s + i.quantity, 0);
     const statusColor = { pending: '#e8a020', poured: '#4caf7d', partial: '#e8a870', shipped: '#4cdf8d' }[o.status] || '#5a7a9a';
@@ -2115,7 +2115,7 @@ function renderOrderAlertCards(data, now) {
       <div class="order-alert-top">
         <span class="order-alert-shop">${o.shop.toUpperCase()}</span>
         ${dueBadge} ${fulfillBadge}
-        <span class="muted" style="font-size:11px">${heads} heads · ${unpoured.length} unpoured · ${o.status}</span>
+        <span class="muted" style="font-size:11px">${heads} bags · ${unpoured.length} unpoured · ${o.status}</span>
         <span style="flex:1"></span>
         <button class="btn btn-sm" onclick="showPage('orders')">Go to Orders</button>
       </div>
