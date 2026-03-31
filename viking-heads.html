@@ -665,6 +665,7 @@
 
 <nav>
   <button id="tab-dashboard"   onclick="showPage('dashboard')">Dashboard</button>
+  <button id="tab-orders"     onclick="showPage('orders')">Orders<span id="vendor-badge" class="vendor-badge"></span></button>
   <button id="tab-swingheads" onclick="showPage('swingheads')">Swingheads</button>
   <button id="tab-finesse"     onclick="showPage('finesse')">Finesse Heads</button>
   <button id="tab-vkhead"      onclick="showPage('vkhead')">VK Head</button>
@@ -675,7 +676,6 @@
   <button id="tab-components"  onclick="showPage('components')">Components</button>
   <button id="tab-history"    onclick="showPage('history')">Pour History</button>
   <button id="tab-data"       onclick="showPage('data')">Data</button>
-  <button id="tab-orders"     onclick="showPage('orders')">Orders<span id="vendor-badge" class="vendor-badge"></span></button>
   <button id="tab-alerts"     onclick="showPage('alerts')">Alerts<span id="alert-badge" class="alert-badge"></span></button>
 </nav>
 
@@ -824,21 +824,11 @@
 <div id="page-orders" class="page">
   <!-- Import Section -->
   <div class="page-header">
-    <div class="page-title">Import</div>
-    <button class="btn" onclick="triggerOrderImport()">Import File / Image</button>
-    <button class="btn btn-gold" onclick="openPasteOrder()">📋 Paste Order JSON</button>
-    <button class="btn" onclick="toggleSkuReference()">SKU Reference</button>
-    <button class="btn" onclick="showReorderList()">🛒 Reorder List</button>
-    <button class="btn" onclick="exportOrdersCsv()">⬇ Export CSV</button>
-  </div>
-  <input type="file" id="order-import-file" accept="image/*,.csv,.txt,.xlsx,.xls" style="display:none" onchange="handleOrderImport(event)">
-  <div id="sku-reference-wrap" style="display:none"></div>
-
-  <!-- Orders Section -->
-  <div class="page-header" style="margin-top:28px">
     <div class="page-title">Orders</div>
     <button class="btn btn-gold" onclick="toggleOrderForm()">+ New Order</button>
+    <button class="btn btn-gold" onclick="openPasteOrder()">📋 Paste JSON</button>
   </div>
+  <input type="file" id="order-import-file" accept="image/*,.csv,.txt,.xlsx,.xls" style="display:none" onchange="handleOrderImport(event)">
   <div id="order-form-wrap" style="display:none"></div>
   <div id="orders-list"></div>
 </div>
