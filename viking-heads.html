@@ -1341,6 +1341,74 @@ function applyMigrations(d) {
     });
     d._seededTackleCave0320 = true;
   }
+  // Migration: seed Reel Addiction Order 1 (03/01/26)
+  if (!d._seededReelAddiction0301) {
+    const raItems = [
+      // Uncle Philthy's PKC (no 1/2 oz)
+      { sku:'UPPC14', qty:3 }, { sku:'UPPC38', qty:3 },
+      { sku:'UPPC34', qty:3 }, { sku:'UPPC1',  qty:3 },
+      // Finesse Head
+      { sku:'VFH1810BF',   qty:3 }, { sku:'VFH1430BF',   qty:3 },
+      { sku:'VFH1810BBF',  qty:3 }, { sku:'VFH01430BBF', qty:3 },
+      // VK Head — Bait Fish
+      { sku:'VKH1430BF',  qty:3 }, { sku:'VKH3840SBF', qty:3 },
+      { sku:'VKH1250SBF', qty:3 }, { sku:'VKH3460SBF', qty:3 },
+      { sku:'VKH170SBF',  qty:3 },
+      // VK Head — Blue Bait Fish
+      { sku:'VKH1430BBF', qty:3 }, { sku:'VKH3840BBF', qty:3 },
+      { sku:'VKH1250BBF', qty:3 }, { sku:'VKH3460BBF', qty:3 },
+      { sku:'VKH1670BBF', qty:3 },
+      // VK Head — Uncle Bing Bong
+      { sku:'VKH1430UKB', qty:3 }, { sku:'VKH3840UKB', qty:3 },
+      { sku:'VKH1250UKB', qty:3 }, { sku:'VKH3460UKB', qty:3 },
+      { sku:'VKH170UKB',  qty:3 },
+      // Swinghead — Bait Fish (all sizes)
+      { sku:'VKS14BF', qty:3 }, { sku:'VKS38BF',  qty:3 },
+      { sku:'VKS12BF', qty:3 }, { sku:'VKS34BF',  qty:3 },
+      { sku:'VKS1BF',  qty:3 },
+      // Swinghead — Bing Bong
+      { sku:'VKS14BB', qty:3 }, { sku:'VKS38BB',  qty:3 },
+      { sku:'VKS12BB', qty:3 }, { sku:'VKS34BB',  qty:3 },
+      { sku:'VKS1BB',  qty:3 },
+      // Swinghead — Commando
+      { sku:'VKS14CMDO', qty:3 }, { sku:'VKS38CMDO', qty:3 },
+      { sku:'VKS12CMDO', qty:3 }, { sku:'VKS34CMDO', qty:3 },
+      { sku:'VKS1CMDO',  qty:3 },
+      // Swinghead — Gold Dust
+      { sku:'VKS14GD', qty:3 }, { sku:'VKS38GD',  qty:3 },
+      { sku:'VKS12GD', qty:3 }, { sku:'VKS34GD',  qty:3 },
+      { sku:'VKS1GD',  qty:3 },
+      // Swinghead — Mint
+      { sku:'VKS14MT',  qty:3 }, { sku:'VKS382MT', qty:3 },
+      { sku:'VKS122MT', qty:3 }, { sku:'VKS34MT',  qty:3 },
+      { sku:'VKS1MT',   qty:3 },
+      // Swinghead — Red
+      { sku:'VKS14RED', qty:3 }, { sku:'VKS38RED', qty:3 },
+      { sku:'VKS12RED', qty:3 }, { sku:'VKS34RED', qty:3 },
+      { sku:'VKS1RED',  qty:3 },
+    ].map(({ sku, qty }) => {
+      const def = SKU_TABLE[sku];
+      if (!def) return null;
+      const heads = qty * (HEADS_PER_BAG[def.productType] || 1);
+      return {
+        sku, productType: def.productType, size: def.size, color: def.color,
+        hookSize: def.hookSize, hookKey: def.hookKey, quantity: qty,
+        components: calcDeductionsForSku(def, heads),
+        itemStatus: { poured: false, loaded: false, painted: false },
+      };
+    }).filter(Boolean);
+    d.orders.unshift({
+      id: 'reeladdiction_0301',
+      shop: 'Reel Addiction',
+      dueDate: '2026-04-01',
+      notes: 'Invoice VK001, Net 30, Ship ASAP. 3 bags of every item ordered.',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      status: 'pending',
+      archived: false,
+      items: raItems,
+    });
+    d._seededReelAddiction0301 = true;
+  }
   // Migration: recalculate order item components using bags→heads conversion
   if (!d._migratedBagComponents) {
     d.orders.forEach(order => {
