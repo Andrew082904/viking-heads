@@ -4214,6 +4214,7 @@ function renderCombinedView(skuAgg, orders, existingBundleId) {
   // Head count breakdowns
   const byType = {}, bySize = {}, byShop = {}, byColor = {}, byColorType = {};
   const bySizeHeads = {}, byShopHeads = {}, byColorHeads = {};
+  const swingBySize = {}, swingByColor = {};
   allEntries.forEach(e => {
     const hpb = HEADS_PER_BAG[e.productType] || 1;
     byType[e.productType] = (byType[e.productType] || 0) + e.totalQty;
@@ -4221,6 +4222,10 @@ function renderCombinedView(skuAgg, orders, existingBundleId) {
     bySizeHeads[e.size]   = (bySizeHeads[e.size]   || 0) + e.totalQty * hpb;
     byColor[e.color]      = (byColor[e.color]      || 0) + e.totalQty;
     byColorHeads[e.color] = (byColorHeads[e.color] || 0) + e.totalQty * hpb;
+    if (e.productType === 'Swinghead') {
+      swingBySize[e.size]   = (swingBySize[e.size]   || 0) + e.totalQty;
+      swingByColor[e.color] = (swingByColor[e.color] || 0) + e.totalQty;
+    }
     const ctKey = e.color + '||' + e.productType;
     byColorType[ctKey] = (byColorType[ctKey] || 0) + e.totalQty;
     e.shops.forEach(s => {
@@ -4239,6 +4244,13 @@ function renderCombinedView(skuAgg, orders, existingBundleId) {
       .join('');
     return `<tr><td style="font-weight:bold">${c}</td><td class="num" style="padding-left:16px">${q}</td><td class="muted" style="padding-left:8px;font-size:11px">(${byColorHeads[c]} heads)</td></tr>${subtypes}`;
   }).join('');
+  const swingSizeRank = ['1/4 oz','3/8 oz','1/2 oz','3/4 oz','1 oz'];
+  const swingSizeTotal = Object.values(swingBySize).reduce((s, q) => s + q, 0);
+  const swingSizeRows  = swingSizeRank.filter(s => swingBySize[s]).map(s => {
+    const q = swingBySize[s]; return `<tr><td>${s}</td><td class="num" style="padding-left:16px">${q}</td><td class="muted" style="padding-left:8px;font-size:11px">(${q * 2} heads)</td></tr>`;
+  }).join('') + `<tr style="border-top:1px solid #1a3050"><td style="font-weight:bold">Total</td><td class="num" style="padding-left:16px;font-weight:bold">${swingSizeTotal}</td><td class="muted" style="padding-left:8px;font-size:11px;font-weight:bold">(${swingSizeTotal * 2} heads)</td></tr>`;
+  const swingColorTotal = Object.values(swingByColor).reduce((s, q) => s + q, 0);
+  const swingColorRows = Object.entries(swingByColor).map(([c, q]) => `<tr><td>${c}</td><td class="num" style="padding-left:16px">${q}</td><td class="muted" style="padding-left:8px;font-size:11px">(${q * 2} heads)</td></tr>`).join('') + `<tr style="border-top:1px solid #1a3050"><td style="font-weight:bold">Total</td><td class="num" style="padding-left:16px;font-weight:bold">${swingColorTotal}</td><td class="muted" style="padding-left:8px;font-size:11px;font-weight:bold">(${swingColorTotal * 2} heads)</td></tr>`;
   const grandSummary = Object.entries(grandTotals).map(([k, v]) => `${v} × ${compLabel(k)}`).join('   |   ');
 
   let rows = '';
@@ -4279,7 +4291,19 @@ function renderCombinedView(skuAgg, orders, existingBundleId) {
       <span class="muted">Total Bags: <span style="color:#c9a227;font-weight:bold;font-size:16px">${grandQty}</span> <span style="font-size:13px">(${grandHeads} heads)</span></span>
     </div>
 
-    <!-- Head Count Summary Cards -->
+    <!-- Swinghead Only -->
+    <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
+      <div style="background:#0e1f30;border:1px solid #c9a227;border-radius:4px;padding:14px;min-width:150px">
+        <div style="color:#c9a227;font-size:10px;letter-spacing:1px;margin-bottom:10px;text-transform:uppercase">Swinghead By Size</div>
+        <table style="width:100%;border:none"><tbody>${swingSizeRows}</tbody></table>
+      </div>
+      <div style="background:#0e1f30;border:1px solid #c9a227;border-radius:4px;padding:14px;min-width:150px">
+        <div style="color:#c9a227;font-size:10px;letter-spacing:1px;margin-bottom:10px;text-transform:uppercase">Swinghead By Color</div>
+        <table style="width:100%;border:none"><tbody>${swingColorRows}</tbody></table>
+      </div>
+    </div>
+
+    <!-- All Products Summary Cards -->
     <div style="display:flex;gap:16px;margin-bottom:28px;flex-wrap:wrap">
       <div style="background:#0e1f30;border:1px solid #1a3050;border-radius:4px;padding:14px;min-width:180px">
         <div style="color:#8aadcf;font-size:10px;letter-spacing:1px;margin-bottom:10px;text-transform:uppercase">By Product Type</div>
